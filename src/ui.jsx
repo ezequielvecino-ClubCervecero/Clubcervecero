@@ -45,3 +45,15 @@ export function Msg({ m }) {
   if (!m) return null
   return <p className={'msg ' + m.tipo} role="status">{m.texto}</p>
 }
+
+export function Acordeon({ titulo, icono, abierto, onToggle, children }) {
+  return (
+    <section className="acordeon">
+      <button type="button" className={'acc-btn' + (abierto ? ' on' : '')} aria-expanded={abierto} onClick={onToggle}>
+        <span className="row" style={{ gap: 10 }}><Icon name={icono} size={20} />{titulo}</span>
+        <span aria-hidden="true">{abierto ? '▲' : '▼'}</span>
+      </button>
+      {abierto && <div className="acc-cuerpo">{children}</div>}
+    </section>
+  )
+}

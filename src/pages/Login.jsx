@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Coin, Msg } from '../ui'
 
-export default function Login() {
+export default function Login({ marca }) {
   const [modo, setModo] = useState('ingresar')
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
@@ -27,9 +27,13 @@ export default function Login() {
   return (
     <div className="login">
       <div className="member" style={{ textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}><Coin size={56} /></div>
-        <h1 style={{ marginTop: 10 }}>Club Cervecero</h1>
-        <p className="mu">Tu tarjeta de socio, tus puntos y tus recargas</p>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {marca.logo_login_url
+            ? <img className="logo" src={marca.logo_login_url} alt="" style={{ maxHeight: 96 }} />
+            : <Coin size={56} />}
+        </div>
+        <h1 style={{ marginTop: 10 }}>{marca.nombre_app}</h1>
+        <p className="mu">{marca.descripcion}</p>
       </div>
       <div className="chips" role="tablist">
         <button type="button" className={'chip' + (modo === 'ingresar' ? ' on' : '')} onClick={() => setModo('ingresar')}>Ingresar</button>

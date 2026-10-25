@@ -38,3 +38,14 @@ th{color:var(--mu);font-weight:500;font-size:12px}
 .estado.ok{border-left-color:var(--ok)}.estado.ok b{color:var(--ok)}
 .estado.warn{border-left-color:#fbbf24}.estado.warn b{color:#fbbf24}
 .estado.bad{border-left-color:#f87171}.estado.bad b{color:#f87171}
+
+.acordeon{margin-bottom:10px}
+.acc-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--sf);color:inherit;border:1px solid var(--ln);border-radius:14px;padding:14px 16px;font:inherit;font-weight:600;cursor:pointer}
+.acc-btn.on{border-color:var(--go)}
+.acc-cuerpo{padding:12px 2px 4px}
+.logo{display:block;max-width:100%;object-fit:contain}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;border:1px solid}
+.pill.ok{color:var(--ok);border-color:var(--ok)}
+.pill.warn{color:#fbbf24;border-color:#fbbf24}
+.pill.bad{color:#f87171;border-color:#f87171}
+.card.mio{border-color:var(--go)}
