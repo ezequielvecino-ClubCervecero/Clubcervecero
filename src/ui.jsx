@@ -11,6 +11,7 @@ export const TIPOS = {
   ajuste: 'Ajuste',
   descuento_cuota: 'Descuento por cuota',
   transferencia: 'Transferencia',
+  compra: 'Compra',
 }
 
 export const CATS = ['Recargas', 'Cervezas especiales', 'Merchandise', 'Entradas a eventos']
@@ -55,5 +56,23 @@ export function Acordeon({ titulo, icono, abierto, onToggle, children }) {
       </button>
       {abierto && <div className="acc-cuerpo">{children}</div>}
     </section>
+  )
+}
+
+// Barra de navegacion fija al pie: pocos botones grandes.
+export function Navegacion({ items, actual, onElegir }) {
+  return (
+    <nav className="nav-pie" aria-label="Secciones">
+      {items.map(([id, texto, icono, aviso]) => (
+        <button key={id} type="button" className={'nav-btn' + (actual === id ? ' on' : '')}
+          aria-current={actual === id ? 'page' : undefined} onClick={() => onElegir(id)}>
+          <span className="nav-ico">
+            <Icon name={icono} size={22} />
+            {aviso > 0 && <span className="nav-aviso">{aviso}</span>}
+          </span>
+          <span>{texto}</span>
+        </button>
+      ))}
+    </nav>
   )
 }

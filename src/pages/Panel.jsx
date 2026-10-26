@@ -2,14 +2,26 @@
 // El administrador ve ademas las pestañas Cuotas y Ajustes y roles.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { Icon, Msg, CATS, fmt } from '../ui'
+import { Icon, Msg, Navegacion, CATS, fmt, fechaHora } from '../ui'
+import Escaner from '../Escaner'
 import Movimientos from './Movimientos'
 
 const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${s.nombre || 'Sin nombre'}`
 
+const ADMIN_MENU = [
+  ['socios', 'Socios', 'Puntos y cuota de cada socio', 'crown'],
+  ['premios', 'Premios', 'Catálogo de canjes con puntos', 'gift'],
+  ['tienda', 'Tienda', 'Productos, stock y secciones', 'pint'],
+  ['cuota', 'Cuotas', 'Registrar pagos de cuota', 'crown'],
+  ['ajuste', 'Ajustes y roles', 'Ajustar puntos y cambiar roles', 'hop'],
+  ['marca', 'Marca', 'Nombre, logos y WhatsApp', 'barrel'],
+]
+
 export default function Panel({ esAdmin, marca, onMarca }) {
-  const [tab, setTab] = useState('carga')
+  const [vista, setVista] = useState('carga')
+  const [sub, setSub] = useState(null)
   const [socios, setSocios] = useState([])
+  const [pendientes, setPendientes] = useState(0)
 
   const cargarSocios = useCallback(async () => {
     const { data } = await supabase
@@ -19,32 +31,54 @@ export default function Panel({ esAdmin, marca, onMarca }) {
     setSocios(data || [])
   }, [])
 
-  useEffect(() => { cargarSocios() }, [cargarSocios])
+  const contarPendientes = useCallback(async () => {
+    const cuenta = (tabla) => supabase.from(tabla).select('id', { count: 'exact', head: true }).eq('estado', 'pendiente')
+    const [a, b] = await Promise.all([cuenta('pagos_informados'), cuenta('pedidos')])
+    setPendientes((a.count || 0) + (b.count || 0))
+  }, [])
 
-  const tabs = [
-    ['carga', 'Registrar carga', 'recarga'],
-    ['cupon', 'Canjear cupón', 'gift'],
+  useEffect(() => { cargarSocios() }, [cargarSocios])
+  useEffect(() => { contarPendientes() }, [contarPendientes, vista])
+
+  const soloSocios = socios.filter((s) => s.rol === 'socio')
+  const items = [
+    ['carga', 'Cargar', 'recarga'],
+    ['cupon', 'Canjear', 'gift'],
+    ['cobros', 'Cobros', 'crown', pendientes],
     ['mov', 'Movimientos', 'barrel'],
-    ...(esAdmin ? [['socios', 'Socios', 'crown'], ['premios', 'Premios', 'pint'], ['cuota', 'Cuotas', 'crown'], ['ajuste', 'Ajustes y roles', 'hop'], ['marca', 'Marca', 'barrel']] : []),
+    ...(esAdmin ? [['admin', 'Admin', 'hop']] : []),
   ]
 
   return (
     <>
-      <div className="chips" role="tablist">
-        {tabs.map(([id, texto, icono]) => (
-          <button key={id} className={'chip' + (tab === id ? ' on' : '')} onClick={() => setTab(id)}>
-            <Icon name={icono} size={16} />{texto}
-          </button>
-        ))}
-      </div>
-      {tab === 'carga' && <Carga socios={socios.filter((s) => s.rol === 'socio')} />}
-      {tab === 'cupon' && <Cupon />}
-      {tab === 'mov' && <Movimientos socios={socios} />}
-      {tab === 'socios' && <Socios />}
-      {tab === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
-      {tab === 'premios' && <Premios />}
-      {tab === 'cuota' && <Cuotas socios={socios.filter((s) => s.rol === 'socio')} recargar={cargarSocios} />}
-      {tab === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
+      {vista === 'carga' && <Carga />}
+      {vista === 'cupon' && <Cupon />}
+      {vista === 'cobros' && <Cobros onCambio={contarPendientes} />}
+      {vista === 'mov' && <Movimientos socios={socios} />}
+      {vista === 'admin' && esAdmin && !sub && (
+        <>
+          <h2 style={{ marginTop: 6 }}>Administración</h2>
+          <div className="menu-admin">
+            {ADMIN_MENU.map(([id, titulo, desc, icono]) => (
+              <button key={id} type="button" className="card menu-card" onClick={() => setSub(id)}>
+                <Icon name={icono} size={22} /><b>{titulo}</b><span className="mu">{desc}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {vista === 'admin' && esAdmin && sub && (
+        <>
+          <button type="button" className="btn" style={{ marginBottom: 12 }} onClick={() => setSub(null)}>← Volver al menú</button>
+          {sub === 'socios' && <Socios />}
+          {sub === 'premios' && <Premios />}
+          {sub === 'tienda' && <TiendaAdmin />}
+          {sub === 'cuota' && <Cuotas socios={soloSocios} recargar={cargarSocios} />}
+          {sub === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
+          {sub === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
+        </>
+      )}
+      <Navegacion items={items} actual={vista} onElegir={(id) => { setVista(id); setSub(null) }} />
     </>
   )
 }
@@ -117,16 +151,22 @@ function Cupon() {
   const [codigo, setCodigo] = useState('')
   const [cupon, setCupon] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [escaneando, setEscaneando] = useState(false)
 
   const limpiar = () => { setCupon(null); setCodigo('') }
 
-  async function ver(e) {
-    e.preventDefault()
+  async function consultar(cod) {
     setMsg(null)
     setCupon(null)
-    const { data, error } = await supabase.rpc('ver_cupon', { p_codigo: codigo.trim() })
+    const { data, error } = await supabase.rpc('ver_cupon', { p_codigo: cod })
     if (error) return setMsg({ tipo: 'error', texto: error.message })
     setCupon(data)
+  }
+
+  function leido(texto) {
+    setEscaneando(false)
+    setCodigo(texto.slice(0, 8))
+    consultar(texto)
   }
 
   async function aceptar() {
@@ -149,12 +189,19 @@ function Cupon() {
     <div className="card">
       <h3>Canjear cupón</h3>
       {!cupon && (
-        <form onSubmit={ver}>
-          <p className="mu">Pedile al socio el código de 8 caracteres de su cupón.</p>
-          <label htmlFor="cp">Código del cupón</label>
-          <input id="cp" value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} maxLength={8} required />
-          <button className="btn pri" style={{ marginTop: 16 }}><Icon name="gift" size={18} />Ver cupón</button>
-        </form>
+        <>
+          <p className="mu" style={{ marginTop: 6 }}>Escaneá el QR del cupón o escribí el código de 8 caracteres.</p>
+          {escaneando
+            ? <Escaner onLeido={leido} onCerrar={() => setEscaneando(false)} />
+            : <button type="button" className="btn pri" style={{ marginTop: 12 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
+                <Icon name="gift" size={18} />Escanear con la cámara
+              </button>}
+          <form onSubmit={(e) => { e.preventDefault(); consultar(codigo.trim()) }}>
+            <label htmlFor="cp">Código del cupón</label>
+            <input id="cp" value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} maxLength={8} required />
+            <button className="btn" style={{ marginTop: 12 }}>Ver cupón</button>
+          </form>
+        </>
       )}
       {cupon && (
         <>
@@ -412,7 +459,10 @@ function Socios() {
 }
 
 function Marca({ marca, onGuardado }) {
-  const [f, setF] = useState({ nombre_app: marca.nombre_app, descripcion: marca.descripcion })
+  const [f, setF] = useState({
+    nombre_app: marca.nombre_app, descripcion: marca.descripcion,
+    whatsapp: marca.whatsapp || '', aviso_envio: marca.aviso_envio || '',
+  })
   const [msg, setMsg] = useState(null)
   const [subiendo, setSubiendo] = useState('')
 
@@ -427,8 +477,9 @@ function Marca({ marca, onGuardado }) {
   async function guardarTextos(e) {
     e.preventDefault()
     setMsg(null)
-    if (await actualizar({ nombre_app: f.nombre_app.trim(), descripcion: f.descripcion.trim() }))
-      setMsg({ tipo: 'ok', texto: 'Nombre y descripción guardados.' })
+    const wa = f.whatsapp.replace(/\D/g, '')
+    if (await actualizar({ nombre_app: f.nombre_app.trim(), descripcion: f.descripcion.trim(), whatsapp: wa || null, aviso_envio: f.aviso_envio.trim() }))
+      setMsg({ tipo: 'ok', texto: 'Datos guardados.' })
   }
 
   async function subir(campo, archivo) {
@@ -453,11 +504,15 @@ function Marca({ marca, onGuardado }) {
   return (
     <>
       <form className="card" onSubmit={guardarTextos}>
-        <h3>Nombre y descripción</h3>
+        <h3>Datos del negocio</h3>
         <label htmlFor="m-nombre">Nombre de la aplicación</label>
         <input id="m-nombre" value={f.nombre_app} onChange={(e) => setF({ ...f, nombre_app: e.target.value })} required />
         <label htmlFor="m-desc">Descripción (se ve en la pantalla de ingreso)</label>
         <input id="m-desc" value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.target.value })} required />
+        <label htmlFor="m-wa">WhatsApp del negocio (con código de país, sin + ni espacios)</label>
+        <input id="m-wa" inputMode="numeric" placeholder="5492215551234" value={f.whatsapp} onChange={(e) => setF({ ...f, whatsapp: e.target.value })} />
+        <label htmlFor="m-envio">Aviso de costo extra del envío (va en el mensaje de WhatsApp)</label>
+        <input id="m-envio" value={f.aviso_envio} onChange={(e) => setF({ ...f, aviso_envio: e.target.value })} />
         <button className="btn pri" style={{ marginTop: 16 }}>Guardar</button>
       </form>
 
@@ -473,6 +528,190 @@ function Marca({ marca, onGuardado }) {
       ))}
       <p className="mu">Imágenes PNG, JPG, WEBP o SVG de hasta 1 MB. Con fondo transparente se ven mejor en modo oscuro.</p>
       <Msg m={msg} />
+    </>
+  )
+}
+
+const PAGO_TXT = { efectivo: 'Efectivo en el local', transferencia: 'Transferencia', puntos: 'Puntos' }
+const pesos = (n) => '$ ' + fmt(n)
+
+function Cobros({ onCambio }) {
+  const [pagos, setPagos] = useState([])
+  const [pedidos, setPedidos] = useState([])
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const [a, b] = await Promise.all([
+      supabase.from('pagos_informados').select('*, perfiles(numero_socio, nombre)').eq('estado', 'pendiente').order('creado_en'),
+      supabase.from('pedidos').select('*, perfiles(numero_socio, nombre), pedido_items(*)').eq('estado', 'pendiente').order('creado_en'),
+    ])
+    setPagos(a.data || [])
+    setPedidos(b.data || [])
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function resolver(promesa, ok) {
+    setMsg(null)
+    const { error } = await promesa
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: ok })
+    await cargar()
+    onCambio()
+  }
+
+  const resolverPago = (id, confirmar) =>
+    resolver(supabase.rpc('resolver_pago_informado', { p_id: id, p_confirmar: confirmar }),
+      confirmar ? 'Pago confirmado: la cuota del socio se actualizó.' : 'Aviso de pago rechazado.')
+
+  const resolverPedido = (id, accion) => {
+    if (accion === 'cancelar' && !window.confirm('¿Cancelar el pedido? Se devuelven el stock y, si pagó con puntos, los puntos.')) return
+    return resolver(supabase.rpc('resolver_pedido', { p_id: id, p_accion: accion }),
+      accion === 'confirmar' ? 'Pedido confirmado.' : 'Pedido cancelado: stock devuelto.')
+  }
+
+  const quien = (p) => 'Socio N.º ' + String(p.perfiles.numero_socio).padStart(4, '0') + ' · ' + (p.perfiles.nombre || 'Sin nombre')
+
+  return (
+    <>
+      <h2 style={{ marginTop: 6 }}>Pagos de cuota informados</h2>
+      {pagos.length === 0 && <p className="mu">No hay avisos de pago pendientes.</p>}
+      {pagos.map((p) => (
+        <div key={p.id} className="card">
+          <b>{quien(p)}</b>
+          <p className="mu">Avisó el {fechaHora(p.creado_en)}. Confirmá solo si la plata ya llegó.</p>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button className="btn" onClick={() => resolverPago(p.id, false)}>Rechazar</button>
+            <button className="btn pri" onClick={() => resolverPago(p.id, true)}>Confirmar pago</button>
+          </div>
+        </div>
+      ))}
+
+      <h2>Pedidos de la tienda</h2>
+      {pedidos.length === 0 && <p className="mu">No hay pedidos pendientes.</p>}
+      {pedidos.map((p) => (
+        <div key={p.id} className="card">
+          <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.creado_en)}</span></div>
+          <p>{quien(p)}</p>
+          {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+          <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (ya descontados)' : pesos(p.total_pesos)}</p>
+          <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}</p>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button className="btn" onClick={() => resolverPedido(p.id, 'cancelar')}>Cancelar pedido</button>
+            <button className="btn pri" onClick={() => resolverPedido(p.id, 'confirmar')}>{p.pago === 'puntos' ? 'Confirmar entrega' : 'Confirmar pago y entrega'}</button>
+          </div>
+        </div>
+      ))}
+      <Msg m={msg} />
+    </>
+  )
+}
+
+function CamposProducto({ r, set, secciones, id }) {
+  return (
+    <div className="filtros">
+      <div><label htmlFor={id + '-n'}>Nombre</label><input id={id + '-n'} value={r.nombre} onChange={(e) => set('nombre', e.target.value)} required /></div>
+      <div>
+        <label htmlFor={id + '-s'}>Sección</label>
+        <select id={id + '-s'} value={r.seccion} onChange={(e) => set('seccion', e.target.value)}>
+          {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+      </div>
+      <div><label htmlFor={id + '-f'}>Formato</label><input id={id + '-f'} placeholder="1 litro" value={r.formato ?? ''} onChange={(e) => set('formato', e.target.value)} /></div>
+      <div><label htmlFor={id + '-p'}>Precio ($)</label><input id={id + '-p'} type="number" min="0" step="1" value={r.precio_pesos} onChange={(e) => set('precio_pesos', e.target.value)} required /></div>
+      <div><label htmlFor={id + '-pp'}>Precio en puntos (opcional)</label><input id={id + '-pp'} type="number" min="0" step="0.25" value={r.precio_puntos ?? ''} onChange={(e) => set('precio_puntos', e.target.value)} /></div>
+      <div><label htmlFor={id + '-st'}>Stock (unidades)</label><input id={id + '-st'} type="number" min="0" step="1" value={r.stock} onChange={(e) => set('stock', e.target.value)} required /></div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <label htmlFor={id + '-d'}>Descripción (opcional, por ejemplo qué incluye el combo)</label>
+        <input id={id + '-d'} value={r.descripcion ?? ''} onChange={(e) => set('descripcion', e.target.value)} />
+      </div>
+    </div>
+  )
+}
+
+function TiendaAdmin() {
+  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '' }
+  const [secciones, setSecciones] = useState([])
+  const [lista, setLista] = useState([])
+  const [nuevo, setNuevo] = useState(vacio)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const [s, p] = await Promise.all([
+      supabase.from('tienda_secciones').select('*').order('orden'),
+      supabase.from('tienda_productos').select('*').order('seccion').order('nombre'),
+    ])
+    setSecciones(s.data || [])
+    setLista(p.data || [])
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  const editar = (id, campo, valor) => setLista((l) => l.map((r) => (r.id === id ? { ...r, [campo]: valor } : r)))
+  const datos = (r) => ({
+    seccion: r.seccion, nombre: r.nombre.trim(),
+    formato: r.formato && r.formato.trim() ? r.formato.trim() : null,
+    descripcion: r.descripcion && r.descripcion.trim() ? r.descripcion.trim() : null,
+    precio_pesos: Number(r.precio_pesos),
+    precio_puntos: r.precio_puntos === '' || r.precio_puntos == null ? null : Number(r.precio_puntos),
+    stock: Math.max(0, Math.floor(Number(r.stock || 0))),
+  })
+
+  async function alternarSeccion(s) {
+    setMsg(null)
+    const { error } = await supabase.from('tienda_secciones').update({ visible: !s.visible }).eq('id', s.id)
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+
+  async function guardar(r) {
+    setMsg(null)
+    const { error } = await supabase.from('tienda_productos').update({ ...datos(r), activo: r.activo }).eq('id', r.id)
+    setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado: ' + r.nombre })
+  }
+
+  async function agregar(e) {
+    e.preventDefault()
+    setMsg(null)
+    const { error } = await supabase.from('tienda_productos').insert(datos(nuevo))
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Producto agregado: ' + nuevo.nombre })
+    setNuevo(vacio)
+    cargar()
+  }
+
+  return (
+    <>
+      <div className="card">
+        <h3>Secciones de la tienda</h3>
+        <p className="mu">Elegí cuáles ven los socios.</p>
+        <div className="chips">
+          {secciones.map((s) => (
+            <button key={s.id} type="button" className={'chip' + (s.visible ? ' on' : '')} onClick={() => alternarSeccion(s)}>
+              {s.nombre}: {s.visible ? 'visible' : 'oculta'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <form className="card" onSubmit={agregar}>
+        <h3>Agregar producto</h3>
+        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} id="nuevo" />
+        <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
+      </form>
+      <Msg m={msg} />
+
+      <h2>Productos</h2>
+      {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
+      {lista.map((r) => (
+        <div key={r.id} className="card" style={{ opacity: r.activo ? 1 : 0.6 }}>
+          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} id={r.id} />
+          <div className="row" style={{ marginTop: 12 }}>
+            <button type="button" className={'chip' + (r.activo ? ' on' : '')} onClick={() => editar(r.id, 'activo', !r.activo)}>
+              {r.activo ? 'Visible para los socios' : 'Oculto'}
+            </button>
+            <button type="button" className="btn pri" onClick={() => guardar(r)}>Guardar cambios</button>
+          </div>
+        </div>
+      ))}
     </>
   )
 }

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { Icon, Coin, Msg, Acordeon, CATS, fmt, fechaHora, TIPOS } from '../ui'
+import { QRCodeSVG } from 'qrcode.react'
+import { Icon, Coin, Msg, Acordeon, Navegacion, CATS, fmt, fechaHora, TIPOS } from '../ui'
+import Tienda from './Tienda'
 
 const COSTO_TRANSFERENCIA = 0.5
+const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
 
 const ICONOS = { Recargas: 'recarga', 'Cervezas especiales': 'pint', Merchandise: 'crown', 'Entradas a eventos': 'barrel' }
 
@@ -21,7 +24,7 @@ function estadoCuota(p) {
   return { clase: 'ok', titulo: 'Cuota al día', texto: 'Paga hasta el ' + fecha + '.' }
 }
 
-export default function Socio({ perfil }) {
+function Inicio({ perfil }) {
   const [p, setP] = useState(perfil)
   const [saldo, setSaldo] = useState(0)
   const [movs, setMovs] = useState([])
@@ -79,10 +82,15 @@ export default function Socio({ perfil }) {
         <span>{e.texto}</span>
       </div>
 
+      <InformarPago />
+
       {cupon && (
         <div className="card" style={{ borderColor: 'var(--am)' }}>
           <h3>Tu cupón de canje</h3>
           <div className="codigo">{cupon.codigo}</div>
+          <div style={{ background: '#fff', padding: 12, borderRadius: 12, width: 'fit-content', margin: '0 auto 10px' }}>
+            <QRCodeSVG value={cupon.codigo} size={176} />
+          </div>
           <p className="mu" style={{ textAlign: 'center' }}>
             Mostralo en caja antes de las {new Date(cupon.vence_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}. Se usa una sola vez.
           </p>
@@ -120,7 +128,7 @@ export default function Socio({ perfil }) {
         <Transferir onListo={cargar} alDia={e.clase === 'ok'} />
       </Acordeon>
 
-      <Acordeon titulo="Ranking del mes" icono="crown" abierto={abierta === 'ranking'} onToggle={() => alternar('ranking')}>
+      <Acordeon titulo={'Ranking de ' + MES} icono="crown" abierto={abierta === 'ranking'} onToggle={() => alternar('ranking')}>
         <Ranking p={p} />
       </Acordeon>
 
@@ -184,9 +192,9 @@ function Ranking({ p }) {
 
   return (
     <>
-      <p className="mu">Puntos sumados por recargas en {mes}. Solo aparecen los socios que eligieron un apodo.</p>
+      <p className="mu">Puntos usados en canjes y compras con puntos en {mes}. Se reinicia solo cada mes. Solo aparecen los socios que eligieron un apodo.</p>
       {!p.apodo && <p className="msg error">Elegí tu apodo en "Mi apodo" para aparecer en el ranking.</p>}
-      {filas && filas.length === 0 && <p className="mu">Todavía nadie sumó puntos este mes.</p>}
+      {filas && filas.length === 0 && <p className="mu">Todavía nadie usó puntos este mes.</p>}
       {(filas || []).map((f) => (
         <div key={f.posicion} className={'card row' + (f.es_mio ? ' mio' : '')}>
           <span><b>{f.posicion}.</b> {f.apodo}{f.es_mio ? ' (vos)' : ''}</span>
@@ -218,5 +226,47 @@ function Apodo({ p, onListo }) {
       <button className="btn pri" style={{ marginTop: 16 }}>Guardar apodo</button>
       <Msg m={msg} />
     </form>
+  )
+}
+
+function InformarPago() {
+  const [ultimo, setUltimo] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('pagos_informados').select('*').order('creado_en', { ascending: false }).limit(1)
+    setUltimo(data && data[0] ? data[0] : null)
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function informar() {
+    setMsg(null)
+    const { error } = await supabase.rpc('informar_pago')
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Listo, avisamos que pagaste. Tu cuota se actualiza cuando el local confirme el pago.' })
+    cargar()
+  }
+
+  const pendiente = ultimo && ultimo.estado === 'pendiente'
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {pendiente
+        ? <p className="mu">Pago informado el {fechaHora(ultimo.creado_en)}: pendiente de confirmación.</p>
+        : <button className="btn" onClick={informar}><Icon name="crown" size={18} />Informar pago</button>}
+      {!pendiente && ultimo && ultimo.estado === 'rechazado' && (
+        <p className="msg error">El local no pudo confirmar tu último aviso de pago. Hablá con el personal.</p>
+      )}
+      <Msg m={msg} />
+    </div>
+  )
+}
+
+export default function Socio({ perfil }) {
+  const [vista, setVista] = useState('inicio')
+  return (
+    <>
+      {vista === 'inicio' ? <Inicio perfil={perfil} /> : <Tienda perfil={perfil} />}
+      <Navegacion items={[['inicio', 'Inicio', 'crown'], ['tienda', 'Tienda', 'pint']]} actual={vista} onElegir={setVista} />
+    </>
   )
 }
