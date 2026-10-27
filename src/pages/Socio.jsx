@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { QRCodeSVG } from 'qrcode.react'
-import { Icon, Coin, Msg, Acordeon, Navegacion, CATS, fmt, fechaHora, TIPOS } from '../ui'
+import { Icon, Coin, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, fechaHora, TIPOS } from '../ui'
 import Tienda from './Tienda'
 
 const COSTO_TRANSFERENCIA = 0.5
@@ -27,49 +27,25 @@ function estadoCuota(p) {
 function Inicio({ perfil }) {
   const [p, setP] = useState(perfil)
   const [saldo, setSaldo] = useState(0)
-  const [movs, setMovs] = useState([])
-  const [recs, setRecs] = useState([])
-  const [cat, setCat] = useState(CATS[0])
-  const [cupon, setCupon] = useState(null)
-  const [abierta, setAbierta] = useState(null)
-  const [msg, setMsg] = useState(null)
 
   const cargar = useCallback(async () => {
-    const [s, m, r, pf] = await Promise.all([
+    const [s, pf] = await Promise.all([
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
-      supabase.from('movimientos_puntos').select('*').order('creado_en', { ascending: false }).limit(10),
-      supabase.from('recompensas').select('*').order('puntos_costo'),
       supabase.from('perfiles').select('*').eq('id', perfil.id).single(),
     ])
     setSaldo(s.data ?? 0)
-    setMovs(m.data || [])
-    setRecs(r.data || [])
     if (pf.data) setP(pf.data)
   }, [perfil.id])
 
   useEffect(() => { cargar() }, [cargar])
 
-  async function generar(id) {
-    setMsg(null)
-    const { data, error } = await supabase.rpc('generar_cupon', { p_recompensa: id })
-    if (error) return setMsg({ tipo: 'error', texto: error.message })
-    setCupon(data)
-    cargar()
-  }
-
-  async function cancelar() {
-    await supabase.rpc('cancelar_cupon', { p_cupon: cupon.id })
-    setCupon(null)
-    cargar()
-  }
-
   const e = estadoCuota(p)
-  const alternar = (k) => setAbierta((a) => (a === k ? null : k))
 
   return (
     <>
       <div className="member">
         <h2 style={{ margin: 0 }}>{p.nombre || 'Socio'}</h2>
+        <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.apodo && <p className="mu">Apodo: {p.apodo}</p>}
         <p className="mu" style={{ marginTop: 14 }}>Saldo disponible</p>
@@ -82,72 +58,8 @@ function Inicio({ perfil }) {
         <span>{e.texto}</span>
       </div>
 
-      <InformarPago />
-
-      {cupon && (
-        <div className="card" style={{ borderColor: 'var(--am)' }}>
-          <h3>Tu cupón de canje</h3>
-          <div className="codigo">{cupon.codigo}</div>
-          <div style={{ background: '#fff', padding: 12, borderRadius: 12, width: 'fit-content', margin: '0 auto 10px' }}>
-            <QRCodeSVG value={cupon.codigo} size={176} />
-          </div>
-          <p className="mu" style={{ textAlign: 'center' }}>
-            Mostralo en caja antes de las {new Date(cupon.vence_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}. Se usa una sola vez.
-          </p>
-          <div className="row" style={{ justifyContent: 'center', marginTop: 12 }}>
-            <button className="btn" onClick={cancelar}>Cancelar cupón</button>
-            <button className="btn" onClick={() => setCupon(null)}>Cerrar</button>
-          </div>
-        </div>
-      )}
-
-      <Acordeon titulo="Canjes" icono="gift" abierto={abierta === 'canjes'} onToggle={() => alternar('canjes')}>
-        <div className="chips">
-          {CATS.map((c) => (
-            <button key={c} className={'chip' + (c === cat ? ' on' : '')} onClick={() => setCat(c)}>
-              <Icon name={ICONOS[c]} size={16} />{c}
-            </button>
-          ))}
-        </div>
-        {recs.filter((r) => r.categoria === cat).map((r) => (
-          <div key={r.id} className="card row">
-            <div>
-              <b>{r.nombre}</b>
-              <p className="pts">{fmt(r.puntos_costo)} pts</p>
-            </div>
-            <button className="btn pri" disabled={saldo < r.puntos_costo} onClick={() => generar(r.id)}>
-              <Icon name="gift" size={18} />
-              {saldo < r.puntos_costo ? 'Faltan ' + fmt(r.puntos_costo - saldo) : 'Generar cupón'}
-            </button>
-          </div>
-        ))}
-        <Msg m={msg} />
-      </Acordeon>
-
-      <Acordeon titulo="Pasar puntos" icono="recarga" abierto={abierta === 'pasar'} onToggle={() => alternar('pasar')}>
-        <Transferir onListo={cargar} alDia={e.clase === 'ok'} />
-      </Acordeon>
-
-      <Acordeon titulo={'Ranking de ' + MES} icono="crown" abierto={abierta === 'ranking'} onToggle={() => alternar('ranking')}>
-        <Ranking p={p} />
-      </Acordeon>
-
-      <Acordeon titulo="Mi apodo" icono="hop" abierto={abierta === 'apodo'} onToggle={() => alternar('apodo')}>
-        <Apodo p={p} onListo={cargar} />
-      </Acordeon>
-
-      <Acordeon titulo="Últimos movimientos" icono="barrel" abierto={abierta === 'movs'} onToggle={() => alternar('movs')}>
-        {movs.length === 0 && <p className="mu">Todavía no tenés movimientos.</p>}
-        {movs.map((m) => (
-          <div key={m.id} className="card row">
-            <div>
-              <b>{TIPOS[m.tipo]}</b>
-              <p className="mu">{m.descripcion} · {fechaHora(m.creado_en)}</p>
-            </div>
-            <span className={'pts ' + (m.puntos > 0 ? 'plus' : 'minus')}>{m.puntos > 0 ? '+' : ''}{fmt(m.puntos)}</span>
-          </div>
-        ))}
-      </Acordeon>
+      <ProximoEvento />
+      <Novedades />
     </>
   )
 }
@@ -193,7 +105,7 @@ function Ranking({ p }) {
   return (
     <>
       <p className="mu">Puntos usados en canjes y compras con puntos en {mes}. Se reinicia solo cada mes. Solo aparecen los socios que eligieron un apodo.</p>
-      {!p.apodo && <p className="msg error">Elegí tu apodo en "Mi apodo" para aparecer en el ranking.</p>}
+      {!p.apodo && <p className="msg error">Elegí tu apodo en Perfil, Mi apodo, para aparecer en el ranking.</p>}
       {filas && filas.length === 0 && <p className="mu">Todavía nadie usó puntos este mes.</p>}
       {(filas || []).map((f) => (
         <div key={f.posicion} className={'card row' + (f.es_mio ? ' mio' : '')}>
@@ -261,12 +173,255 @@ function InformarPago() {
   )
 }
 
+function Perfil({ perfil }) {
+  const [p, setP] = useState(perfil)
+  const [movs, setMovs] = useState([])
+  const [abierta, setAbierta] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const [m, pf] = await Promise.all([
+      supabase.from('movimientos_puntos').select('*').order('creado_en', { ascending: false }).limit(10),
+      supabase.from('perfiles').select('*').eq('id', perfil.id).single(),
+    ])
+    setMovs(m.data || [])
+    if (pf.data) setP(pf.data)
+  }, [perfil.id])
+  useEffect(() => { cargar() }, [cargar])
+
+  const alternar = (k) => setAbierta((a) => (a === k ? null : k))
+
+  return (
+    <>
+      <div className="card">
+        <h2 style={{ margin: 0 }}>{p.nombre || 'Socio'}</h2>
+        <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
+        <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
+        {p.apodo && <p className="mu">Apodo: {p.apodo}</p>}
+        <p className="mu" style={{ marginTop: 8 }}>Invitá a un amigo: si al crear su cuenta escribe tu número de socio{p.apodo ? ' o tu apodo' : ''}, sumás 0,25 puntos.</p>
+      </div>
+
+      <Acordeon titulo="Informar pago" icono="crown" abierto={abierta === 'pago'} onToggle={() => alternar('pago')}>
+        <InformarPago />
+      </Acordeon>
+
+      <Acordeon titulo="Mi apodo" icono="hop" abierto={abierta === 'apodo'} onToggle={() => alternar('apodo')}>
+        <Apodo p={p} onListo={cargar} />
+      </Acordeon>
+
+      <Acordeon titulo="Últimos movimientos" icono="barrel" abierto={abierta === 'movs'} onToggle={() => alternar('movs')}>
+        {movs.length === 0 && <p className="mu">Todavía no tenés movimientos.</p>}
+        {movs.map((m) => (
+          <div key={m.id} className="card row">
+            <div>
+              <b>{TIPOS[m.tipo]}</b>
+              <p className="mu">{m.descripcion} · {fechaHora(m.creado_en)}</p>
+            </div>
+            <span className={'pts ' + (m.puntos > 0 ? 'plus' : 'minus')}>{m.puntos > 0 ? '+' : ''}{fmt(m.puntos)}</span>
+          </div>
+        ))}
+      </Acordeon>
+    </>
+  )
+}
+
+function Canjes({ perfil }) {
+  const [saldo, setSaldo] = useState(0)
+  const [recs, setRecs] = useState([])
+  const [cat, setCat] = useState(CATS[0])
+  const [cupon, setCupon] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const [s, r] = await Promise.all([
+      supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
+      supabase.from('recompensas').select('*').order('puntos_costo'),
+    ])
+    setSaldo(s.data ?? 0)
+    setRecs(r.data || [])
+  }, [perfil.id])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function generar(id) {
+    setMsg(null)
+    const { data, error } = await supabase.rpc('generar_cupon', { p_recompensa: id })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setCupon(data)
+    cargar()
+  }
+
+  async function cancelar() {
+    await supabase.rpc('cancelar_cupon', { p_cupon: cupon.id })
+    setCupon(null)
+    cargar()
+  }
+
+  return (
+    <>
+      <h2>Canjes</h2>
+      <p className="mu">Saldo disponible: <b className="num">{fmt(saldo)}</b> puntos</p>
+
+      {cupon && (
+        <div className="card" style={{ borderColor: 'var(--am)' }}>
+          <h3>Tu cupón de canje</h3>
+          <div className="codigo">{cupon.codigo}</div>
+          <div style={{ background: '#fff', padding: 12, borderRadius: 12, width: 'fit-content', margin: '0 auto 10px' }}>
+            <QRCodeSVG value={cupon.codigo} size={176} />
+          </div>
+          <p className="mu" style={{ textAlign: 'center' }}>
+            Mostralo en caja antes de las {new Date(cupon.vence_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}. Se usa una sola vez.
+          </p>
+          <div className="row" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <button className="btn" onClick={cancelar}>Cancelar cupón</button>
+            <button className="btn" onClick={() => setCupon(null)}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="chips">
+        {CATS.map((c) => (
+          <button key={c} className={'chip' + (c === cat ? ' on' : '')} onClick={() => setCat(c)}>
+            <Icon name={ICONOS[c]} size={16} />{c}
+          </button>
+        ))}
+      </div>
+      {recs.filter((r) => r.categoria === cat).map((r) => (
+        <div key={r.id} className="card row">
+          <div>
+            <b>{r.nombre}</b>
+            <p className="pts">{fmt(r.puntos_costo)} pts</p>
+          </div>
+          <button className="btn pri" disabled={saldo < r.puntos_costo} onClick={() => generar(r.id)}>
+            <Icon name="gift" size={18} />
+            {saldo < r.puntos_costo ? 'Faltan ' + fmt(r.puntos_costo - saldo) : 'Generar cupón'}
+          </button>
+        </div>
+      ))}
+      <Msg m={msg} />
+    </>
+  )
+}
+
+function Club({ perfil }) {
+  const [p, setP] = useState(perfil)
+  const [abierta, setAbierta] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('perfiles').select('*').eq('id', perfil.id).single()
+    if (data) setP(data)
+  }, [perfil.id])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const e = estadoCuota(p)
+  const alternar = (k) => setAbierta((a) => (a === k ? null : k))
+
+  return (
+    <>
+      <h2>Club</h2>
+      <Acordeon titulo="Pasar puntos" icono="recarga" abierto={abierta === 'pasar'} onToggle={() => alternar('pasar')}>
+        <Transferir onListo={cargar} alDia={e.clase === 'ok'} />
+      </Acordeon>
+
+      <Acordeon titulo={'Ranking de ' + MES} icono="crown" abierto={abierta === 'ranking'} onToggle={() => alternar('ranking')}>
+        <Ranking p={p} />
+      </Acordeon>
+    </>
+  )
+}
+
 export default function Socio({ perfil }) {
   const [vista, setVista] = useState('inicio')
   return (
     <>
-      {vista === 'inicio' ? <Inicio perfil={perfil} /> : <Tienda perfil={perfil} />}
-      <Navegacion items={[['inicio', 'Inicio', 'crown'], ['tienda', 'Tienda', 'pint']]} actual={vista} onElegir={setVista} />
+      {vista === 'inicio' && <Inicio perfil={perfil} />}
+      {vista === 'tienda' && <Tienda perfil={perfil} />}
+      {vista === 'canjes' && <Canjes perfil={perfil} />}
+      {vista === 'club' && <Club perfil={perfil} />}
+      {vista === 'perfil' && <Perfil perfil={perfil} />}
+      <Navegacion
+        items={[['inicio', 'Inicio', 'crown'], ['tienda', 'Tienda', 'pint'], ['canjes', 'Canjes', 'gift'], ['club', 'Club', 'barrel'], ['perfil', 'Perfil', 'hop']]}
+        actual={vista} onElegir={setVista} />
+    </>
+  )
+}
+
+const ZONA = 'America/Argentina/Buenos_Aires'
+
+function ProximoEvento() {
+  const [ev, setEv] = useState(undefined)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.rpc('proximo_evento')
+    setEv(data && data[0] ? data[0] : null)
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function alternar() {
+    setMsg(null)
+    const { error } = await supabase.rpc('anotarse_evento', { p_evento: ev.id, p_anotar: !ev.anotado })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+
+  if (ev === undefined) return null
+  if (ev === null) {
+    return (
+      <>
+        <h2>Próximo evento</h2>
+        <p className="mu">Todavía no hay un próximo evento.</p>
+      </>
+    )
+  }
+
+  const f = new Date(ev.fecha)
+  const dia = f.toLocaleDateString('es-AR', { day: 'numeric', timeZone: ZONA })
+  const mes = f.toLocaleDateString('es-AR', { month: 'short', timeZone: ZONA }).replace('.', '')
+  const hora = f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: ZONA })
+  const quedan = ev.cupos == null ? null : Math.max(0, ev.cupos - Number(ev.inscriptos))
+  const cupos = quedan === null ? '' : quedan === 0 ? 'Cupos agotados' : quedan <= 5 ? 'Quedan pocos cupos (' + quedan + ')' : 'Cupos disponibles: ' + quedan
+
+  return (
+    <>
+      <h2>Próximo evento</h2>
+      <div className="card row" style={{ flexWrap: 'nowrap', gap: 12 }}>
+        <div className="fecha-evento"><b>{dia}</b><span>{mes}</span></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <b>{ev.titulo}</b>
+          <p className="mu">{hora} h{cupos ? ' · ' + cupos : ''}</p>
+          {ev.descripcion && <p className="mu">{ev.descripcion}</p>}
+        </div>
+        <button className="btn" disabled={!ev.anotado && quedan === 0} onClick={alternar}>
+          {ev.anotado ? 'Cancelar inscripción' : 'Anotarme'}
+        </button>
+      </div>
+      {ev.anotado && <p className="msg ok">Estás anotado en este evento.</p>}
+      <Msg m={msg} />
+    </>
+  )
+}
+
+function Novedades() {
+  const [lista, setLista] = useState(null)
+  useEffect(() => {
+    supabase.from('novedades').select('*').eq('publicada', true)
+      .order('creado_en', { ascending: false }).limit(5)
+      .then(({ data }) => setLista(data || []))
+  }, [])
+
+  if (!lista) return null
+  return (
+    <>
+      <h2>Novedades</h2>
+      {lista.length === 0 && <p className="mu">Todavía no hay novedades.</p>}
+      {lista.map((n) => (
+        <div key={n.id} className="card">
+          <b>{n.titulo}</b>
+          <p className="mu">{fechaHora(n.creado_en)}</p>
+          {n.texto && <p style={{ marginTop: 6, whiteSpace: 'pre-line' }}>{n.texto}</p>}
+        </div>
+      ))}
     </>
   )
 }

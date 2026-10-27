@@ -12,6 +12,7 @@ export const TIPOS = {
   descuento_cuota: 'Descuento por cuota',
   transferencia: 'Transferencia',
   compra: 'Compra',
+  bonificacion: 'Bonificación',
 }
 
 export const CATS = ['Recargas', 'Cervezas especiales', 'Merchandise', 'Entradas a eventos']
@@ -75,4 +76,10 @@ export function Navegacion({ items, actual, onElegir }) {
       ))}
     </nav>
   )
+}
+
+// Categoria del socio: Miembro o Miembro Gold (en dorado).
+export function Categoria({ valor }) {
+  const gold = valor === 'gold'
+  return <span className={'pill ' + (gold ? 'gold' : 'cel')}>{gold ? 'Miembro Gold' : 'Miembro'}</span>
 }

@@ -2,8 +2,10 @@
 // El administrador ve ademas las pestañas Cuotas y Ajustes y roles.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { Icon, Msg, Navegacion, CATS, fmt, fechaHora } from '../ui'
+import { Icon, Msg, Navegacion, Categoria, CATS, fmt, fechaHora } from '../ui'
 import Escaner from '../Escaner'
+import MasVendidos from '../MasVendidos'
+import { subirImagenProducto } from '../imagenes'
 import Movimientos from './Movimientos'
 
 const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${s.nombre || 'Sin nombre'}`
@@ -12,13 +14,16 @@ const ADMIN_MENU = [
   ['socios', 'Socios', 'Puntos y cuota de cada socio', 'crown'],
   ['premios', 'Premios', 'Catálogo de canjes con puntos', 'gift'],
   ['tienda', 'Tienda', 'Productos, stock y secciones', 'pint'],
+  ['facturacion', 'Facturación', 'Ventas del mes con detalle', 'crown'],
+  ['eventos', 'Eventos', 'Próximos eventos del club', 'gift'],
+  ['novedades', 'Novedades', 'Anuncios para los socios', 'hop'],
   ['cuota', 'Cuotas', 'Registrar pagos de cuota', 'crown'],
   ['ajuste', 'Ajustes y roles', 'Ajustar puntos y cambiar roles', 'hop'],
   ['marca', 'Marca', 'Nombre, logos y WhatsApp', 'barrel'],
 ]
 
 export default function Panel({ esAdmin, marca, onMarca }) {
-  const [vista, setVista] = useState('carga')
+  const [vista, setVista] = useState(esAdmin ? 'cobros' : 'carga')
   const [sub, setSub] = useState(null)
   const [socios, setSocios] = useState([])
   const [pendientes, setPendientes] = useState(0)
@@ -41,13 +46,11 @@ export default function Panel({ esAdmin, marca, onMarca }) {
   useEffect(() => { contarPendientes() }, [contarPendientes, vista])
 
   const soloSocios = socios.filter((s) => s.rol === 'socio')
-  const items = [
-    ['carga', 'Cargar', 'recarga'],
-    ['cupon', 'Canjear', 'gift'],
-    ['cobros', 'Cobros', 'crown', pendientes],
-    ['mov', 'Movimientos', 'barrel'],
-    ...(esAdmin ? [['admin', 'Admin', 'hop']] : []),
-  ]
+  // El administrador arranca en Cobros; el personal, en Cargar.
+  const itemCobros = ['cobros', 'Cobros', 'crown', pendientes]
+  const items = esAdmin
+    ? [itemCobros, ['carga', 'Cargar', 'recarga'], ['cupon', 'Canjear', 'gift'], ['mov', 'Movimientos', 'barrel'], ['admin', 'Admin', 'hop']]
+    : [['carga', 'Cargar', 'recarga'], ['cupon', 'Canjear', 'gift'], itemCobros, ['mov', 'Movimientos', 'barrel']]
 
   return (
     <>
@@ -73,6 +76,9 @@ export default function Panel({ esAdmin, marca, onMarca }) {
           {sub === 'socios' && <Socios />}
           {sub === 'premios' && <Premios />}
           {sub === 'tienda' && <TiendaAdmin />}
+          {sub === 'facturacion' && <Facturacion />}
+          {sub === 'eventos' && <EventosAdmin />}
+          {sub === 'novedades' && <NovedadesAdmin />}
           {sub === 'cuota' && <Cuotas socios={soloSocios} recargar={cargarSocios} />}
           {sub === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
           {sub === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
@@ -117,7 +123,7 @@ function Carga() {
   return (
     <div className="card">
       <h3>Registrar carga de puntos</h3>
-      <p className="mu">1 litro suma 1 punto. Cada unidad extra suma 0,25 puntos.</p>
+      <p className="mu">Cada punto cargado equivale a 1 litro recargado. Cada compra extra suma 0,25 puntos.</p>
       {!socio && (
         <form onSubmit={buscar}>
           <label htmlFor="c-busca">Número de socio o apodo</label>
@@ -132,9 +138,9 @@ function Carga() {
             <span>Socio N.º {String(socio.numero_socio).padStart(4, '0')}</span>
             <span>{socio.nombre || 'Sin nombre'}</span>
           </div>
-          <label htmlFor="c-litros">Litros recargados</label>
+          <label htmlFor="c-litros">Puntos a cargar</label>
           <input id="c-litros" type="number" min="0" step="0.1" value={litros} onChange={(e) => setLitros(e.target.value)} />
-          <label htmlFor="c-extras">Unidades extra o estilos especiales</label>
+          <label htmlFor="c-extras">Compras extras</label>
           <input id="c-extras" type="number" min="0" step="1" value={extras} onChange={(e) => setExtras(e.target.value)} />
           <div className="row" style={{ marginTop: 16 }}>
             <button type="button" className="btn" onClick={() => setSocio(null)}>Cambiar socio</button>
@@ -414,13 +420,21 @@ function Socios() {
   const [lista, setLista] = useState([])
   const [orden, setOrden] = useState('acumulado')
   const [msg, setMsg] = useState(null)
+  const [version, setVersion] = useState(0)
 
   useEffect(() => {
     supabase.rpc('resumen_socios').then(({ data, error }) => {
       if (error) return setMsg({ tipo: 'error', texto: error.message })
       setLista(data || [])
     })
-  }, [])
+  }, [version])
+
+  async function cambiarCategoria(s) {
+    setMsg(null)
+    const { error } = await supabase.rpc('cambiar_categoria', { p_socio: s.id, p_categoria: s.categoria === 'gold' ? 'miembro' : 'gold' })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setVersion((v) => v + 1)
+  }
 
   const ordenada = [...lista].sort((a, b) =>
     orden === 'numero' ? a.numero_socio - b.numero_socio : Number(b[orden]) - Number(a[orden]))
@@ -437,7 +451,7 @@ function Socios() {
       <Msg m={msg} />
       <div className="scroll">
         <table>
-          <thead><tr><th>#</th><th>Socio</th><th>Puntos actuales</th><th>Puntos adquiridos</th><th>Cuota</th></tr></thead>
+          <thead><tr><th>#</th><th>Socio</th><th>Puntos actuales</th><th>Puntos adquiridos</th><th>Cuota</th><th>Categoría</th></tr></thead>
           <tbody>
             {ordenada.map((s, i) => {
               const [clase, texto] = cuotaPill(s)
@@ -448,6 +462,10 @@ function Socios() {
                   <td>{fmt(s.saldo)}</td>
                   <td>{fmt(s.acumulado)}</td>
                   <td><span className={'pill ' + clase}>{texto}</span></td>
+                  <td>
+                    <Categoria valor={s.categoria} />{' '}
+                    <button type="button" className="btn" onClick={() => cambiarCategoria(s)}>{s.categoria === 'gold' ? 'Quitar Gold' : 'Hacer Gold'}</button>
+                  </td>
                 </tr>
               )
             })}
@@ -606,7 +624,7 @@ function Cobros({ onCambio }) {
   )
 }
 
-function CamposProducto({ r, set, secciones, id }) {
+function CamposProducto({ r, set, secciones, id, onImagen }) {
   return (
     <div className="filtros">
       <div><label htmlFor={id + '-n'}>Nombre</label><input id={id + '-n'} value={r.nombre} onChange={(e) => set('nombre', e.target.value)} required /></div>
@@ -621,6 +639,12 @@ function CamposProducto({ r, set, secciones, id }) {
       <div><label htmlFor={id + '-pp'}>Precio en puntos (opcional)</label><input id={id + '-pp'} type="number" min="0" step="0.25" value={r.precio_puntos ?? ''} onChange={(e) => set('precio_puntos', e.target.value)} /></div>
       <div><label htmlFor={id + '-st'}>Stock (unidades)</label><input id={id + '-st'} type="number" min="0" step="1" value={r.stock} onChange={(e) => set('stock', e.target.value)} required /></div>
       <div style={{ gridColumn: '1 / -1' }}>
+        <label htmlFor={id + '-i'}>Imagen (opcional, se reduce sola para que sea liviana)</label>
+        {r.imagen_url && <img className="prod-img" src={r.imagen_url} alt="Imagen actual del producto" style={{ margin: '6px 0' }} />}
+        <input id={id + '-i'} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { onImagen(e.target.files[0]); e.target.value = '' }} />
+        {r.imagen_url && <div style={{ marginTop: 8 }}><button type="button" className="btn" onClick={() => set('imagen_url', null)}>Quitar imagen</button></div>}
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
         <label htmlFor={id + '-d'}>Descripción (opcional, por ejemplo qué incluye el combo)</label>
         <input id={id + '-d'} value={r.descripcion ?? ''} onChange={(e) => set('descripcion', e.target.value)} />
       </div>
@@ -629,7 +653,7 @@ function CamposProducto({ r, set, secciones, id }) {
 }
 
 function TiendaAdmin() {
-  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '' }
+  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '', imagen_url: null }
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
@@ -653,7 +677,19 @@ function TiendaAdmin() {
     precio_pesos: Number(r.precio_pesos),
     precio_puntos: r.precio_puntos === '' || r.precio_puntos == null ? null : Number(r.precio_puntos),
     stock: Math.max(0, Math.floor(Number(r.stock || 0))),
+    imagen_url: r.imagen_url || null,
   })
+
+  async function cambiarImagen(archivo, alSubir) {
+    if (!archivo) return
+    setMsg(null)
+    try {
+      alSubir(await subirImagenProducto(archivo))
+      setMsg({ tipo: 'ok', texto: 'Imagen subida. Guardá el producto para aplicarla.' })
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: e.message })
+    }
+  }
 
   async function alternarSeccion(s) {
     setMsg(null)
@@ -692,9 +728,15 @@ function TiendaAdmin() {
         </div>
       </div>
 
+      <div className="card">
+        <h3>Más vendidos</h3>
+        <MasVendidos />
+      </div>
+
       <form className="card" onSubmit={agregar}>
         <h3>Agregar producto</h3>
-        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} id="nuevo" />
+        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} id="nuevo"
+          onImagen={(f) => cambiarImagen(f, (url) => setNuevo((n) => ({ ...n, imagen_url: url })))} />
         <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
       </form>
       <Msg m={msg} />
@@ -703,12 +745,257 @@ function TiendaAdmin() {
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
         <div key={r.id} className="card" style={{ opacity: r.activo ? 1 : 0.6 }}>
-          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} id={r.id} />
+          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} id={r.id}
+            onImagen={(f) => cambiarImagen(f, (url) => editar(r.id, 'imagen_url', url))} />
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" className={'chip' + (r.activo ? ' on' : '')} onClick={() => editar(r.id, 'activo', !r.activo)}>
               {r.activo ? 'Visible para los socios' : 'Oculto'}
             </button>
             <button type="button" className="btn pri" onClick={() => guardar(r)}>Guardar cambios</button>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+const mesLargo = (a, m) => new Date(Date.UTC(a, m, 15)).toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+const sumaPesos = (lista) => lista.reduce((acc, p) => acc + Number(p.total_pesos), 0)
+
+function Facturacion() {
+  // Argentina es UTC-3 todo el año: el mes arranca a las 03:00 UTC del dia 1.
+  const hoy = new Date(Date.now() - 3 * 3600 * 1000)
+  const actual = { a: hoy.getUTCFullYear(), m: hoy.getUTCMonth() }
+  const [per, setPer] = useState(actual)
+  const [pedidos, setPedidos] = useState([])
+  const [cuotas, setCuotas] = useState(null)
+  const [filtro, setFiltro] = useState('todos')
+  const [cargando, setCargando] = useState(true)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    let vigente = true
+    const desde = new Date(Date.UTC(per.a, per.m, 1, 3)).toISOString()
+    const hasta = new Date(Date.UTC(per.a, per.m + 1, 1, 3)).toISOString()
+    setCargando(true)
+    setMsg(null)
+    Promise.all([
+      supabase.from('pedidos').select('*, perfiles(numero_socio, nombre), pedido_items(*)')
+        .eq('estado', 'confirmado').gte('resuelto_en', desde).lt('resuelto_en', hasta)
+        .order('resuelto_en', { ascending: false }),
+      supabase.from('pagos_cuota').select('monto').gte('pagado_en', desde).lt('pagado_en', hasta),
+    ]).then(([a, b]) => {
+      if (!vigente) return
+      if (a.error) setMsg({ tipo: 'error', texto: a.error.message })
+      setPedidos(a.data || [])
+      setCuotas(b.error ? null : b.data || [])
+      setCargando(false)
+    })
+    return () => { vigente = false }
+  }, [per])
+
+  const mover = (d) => setPer(({ a, m }) => {
+    const n = new Date(Date.UTC(a, m + d, 1))
+    return { a: n.getUTCFullYear(), m: n.getUTCMonth() }
+  })
+  const esActual = per.a === actual.a && per.m === actual.m
+
+  const dinero = pedidos.filter((p) => p.pago !== 'puntos')
+  const efectivo = dinero.filter((p) => p.pago === 'efectivo')
+  const transf = dinero.filter((p) => p.pago === 'transferencia')
+  const conPuntos = pedidos.filter((p) => p.pago === 'puntos')
+  const totalCuotas = cuotas ? cuotas.reduce((acc, c) => acc + Number(c.monto), 0) : 0
+  const lista = pedidos.filter((p) => filtro === 'todos' || p.pago === filtro)
+
+  return (
+    <>
+      <div className="card">
+        <div className="row">
+          <button type="button" className="btn" aria-label="Mes anterior" onClick={() => mover(-1)}>◀</button>
+          <h3 style={{ textTransform: 'capitalize' }}>{mesLargo(per.a, per.m)}</h3>
+          <button type="button" className="btn" aria-label="Mes siguiente" disabled={esActual} onClick={() => mover(1)}>▶</button>
+        </div>
+        <p className="mu" style={{ marginTop: 12 }}>Facturado en la tienda</p>
+        <p className="pts" style={{ fontSize: 32 }}>{cargando ? '...' : pesos(sumaPesos(dinero))}</p>
+        <p className="mu">Efectivo {pesos(sumaPesos(efectivo))} ({efectivo.length}) · Transferencia {pesos(sumaPesos(transf))} ({transf.length})</p>
+        <p className="mu">Pagados con puntos: {conPuntos.length} pedidos ({fmt(conPuntos.reduce((acc, p) => acc + Number(p.total_puntos), 0))} puntos). No suman a la facturación.</p>
+        {cuotas && (
+          <p className="mu" style={{ marginTop: 8 }}>
+            Cuotas cobradas, aparte: {pesos(totalCuotas)} ({cuotas.length} pagos) · Total con cuotas: {pesos(sumaPesos(dinero) + totalCuotas)}
+          </p>
+        )}
+        <p className="mu" style={{ marginTop: 8 }}>Cada pedido se cuenta en el mes en que se confirma. No incluye el costo de envío, que se acuerda por WhatsApp.</p>
+      </div>
+      <Msg m={msg} />
+
+      <h2>Detalle de las compras</h2>
+      <div className="chips">
+        {[['todos', 'Todas'], ['efectivo', 'Efectivo'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']].map(([id, t]) => (
+          <button key={id} type="button" className={'chip' + (filtro === id ? ' on' : '')} onClick={() => setFiltro(id)}>{t}</button>
+        ))}
+      </div>
+      {!cargando && lista.length === 0 && <p className="mu">No hay compras confirmadas para mostrar en este mes.</p>}
+      {lista.map((p) => (
+        <div key={p.id} className="card">
+          <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.resuelto_en)}</span></div>
+          <p>Socio N.º {String(p.perfiles.numero_socio).padStart(4, '0')} · {p.perfiles.nombre || 'Sin nombre'}</p>
+          {p.pedido_items.map((i) => (
+            <div key={i.id} className="row" style={{ marginTop: 4 }}>
+              <span>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</span>
+              <span className="mu">{p.pago === 'puntos' && i.precio_puntos != null ? fmt(i.precio_puntos * i.cantidad) + ' pts' : pesos(i.precio_pesos * i.cantidad)}</span>
+            </div>
+          ))}
+          <div className="row" style={{ marginTop: 8 }}>
+            <span className="mu">{PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}</span>
+            <span className="pts">{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts' : pesos(p.total_pesos)}</span>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+// Fecha ISO <-> campo datetime-local (Argentina es UTC-3 todo el año).
+const aCampo = (iso) => new Date(new Date(iso).getTime() - 3 * 3600 * 1000).toISOString().slice(0, 16)
+const deCampo = (v) => new Date(v + ':00-03:00').toISOString()
+
+function EventosAdmin() {
+  const vacio = { titulo: '', descripcion: '', fecha: '', cupos: '' }
+  const [lista, setLista] = useState([])
+  const [nuevo, setNuevo] = useState(vacio)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('eventos').select('*, inscripciones_eventos(count)').order('fecha', { ascending: false })
+    setLista((data || []).map((e) => ({
+      ...e, fecha: aCampo(e.fecha), cupos: e.cupos ?? '', descripcion: e.descripcion ?? '',
+      anotados: e.inscripciones_eventos && e.inscripciones_eventos[0] ? e.inscripciones_eventos[0].count : 0,
+    })))
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  const editar = (id, c, v) => setLista((l) => l.map((e) => (e.id === id ? { ...e, [c]: v } : e)))
+  const datos = (e) => ({
+    titulo: e.titulo.trim(), descripcion: e.descripcion.trim() || null, fecha: deCampo(e.fecha),
+    cupos: e.cupos === '' ? null : Math.max(0, Math.floor(Number(e.cupos))),
+  })
+
+  async function guardar(e) {
+    setMsg(null)
+    const { error } = await supabase.from('eventos').update(datos(e)).eq('id', e.id)
+    setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado: ' + e.titulo })
+  }
+  async function agregar(ev) {
+    ev.preventDefault()
+    setMsg(null)
+    const { error } = await supabase.from('eventos').insert(datos(nuevo))
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Evento agregado: ' + nuevo.titulo })
+    setNuevo(vacio)
+    cargar()
+  }
+  async function borrar(e) {
+    if (!window.confirm('¿Eliminar "' + e.titulo + '"? También se borran las inscripciones.')) return
+    setMsg(null)
+    const { error } = await supabase.from('eventos').delete().eq('id', e.id)
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+
+  const campos = (e, set, id) => (
+    <div className="filtros">
+      <div><label htmlFor={id + '-t'}>Título</label><input id={id + '-t'} value={e.titulo} onChange={(x) => set('titulo', x.target.value)} required /></div>
+      <div><label htmlFor={id + '-f'}>Fecha y hora</label><input id={id + '-f'} type="datetime-local" value={e.fecha} onChange={(x) => set('fecha', x.target.value)} required /></div>
+      <div><label htmlFor={id + '-c'}>Cupos (vacío = sin límite)</label><input id={id + '-c'} type="number" min="0" step="1" value={e.cupos} onChange={(x) => set('cupos', x.target.value)} /></div>
+      <div style={{ gridColumn: '1 / -1' }}><label htmlFor={id + '-d'}>Descripción (opcional)</label><input id={id + '-d'} value={e.descripcion} onChange={(x) => set('descripcion', x.target.value)} /></div>
+    </div>
+  )
+
+  return (
+    <>
+      <form className="card" onSubmit={agregar}>
+        <h3>Agregar evento</h3>
+        {campos(nuevo, (c, v) => setNuevo({ ...nuevo, [c]: v }), 'nuevo-ev')}
+        <button className="btn pri" style={{ marginTop: 16 }}>Agregar evento</button>
+      </form>
+      <Msg m={msg} />
+      <h2>Eventos</h2>
+      {lista.length === 0 && <p className="mu">Todavía no cargaste eventos.</p>}
+      {lista.map((e) => (
+        <div key={e.id} className="card">
+          {campos(e, (c, v) => editar(e.id, c, v), e.id)}
+          <p className="mu" style={{ marginTop: 8 }}>Anotados: {e.anotados}</p>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button type="button" className="btn" onClick={() => borrar(e)}>Eliminar</button>
+            <button type="button" className="btn pri" onClick={() => guardar(e)}>Guardar cambios</button>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function NovedadesAdmin() {
+  const [lista, setLista] = useState([])
+  const [nueva, setNueva] = useState({ titulo: '', texto: '' })
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('novedades').select('*').order('creado_en', { ascending: false })
+    setLista(data || [])
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  const editar = (id, c, v) => setLista((l) => l.map((n) => (n.id === id ? { ...n, [c]: v } : n)))
+
+  async function guardar(n) {
+    setMsg(null)
+    const { error } = await supabase.from('novedades')
+      .update({ titulo: n.titulo.trim(), texto: n.texto.trim(), publicada: n.publicada }).eq('id', n.id)
+    setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado: ' + n.titulo })
+  }
+  async function agregar(e) {
+    e.preventDefault()
+    setMsg(null)
+    const { error } = await supabase.from('novedades').insert({ titulo: nueva.titulo.trim(), texto: nueva.texto.trim() })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Novedad publicada: ' + nueva.titulo })
+    setNueva({ titulo: '', texto: '' })
+    cargar()
+  }
+  async function borrar(n) {
+    if (!window.confirm('¿Eliminar "' + n.titulo + '"?')) return
+    setMsg(null)
+    const { error } = await supabase.from('novedades').delete().eq('id', n.id)
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+
+  return (
+    <>
+      <form className="card" onSubmit={agregar}>
+        <h3>Nueva novedad</h3>
+        <label htmlFor="nv-t">Título</label>
+        <input id="nv-t" value={nueva.titulo} onChange={(e) => setNueva({ ...nueva, titulo: e.target.value })} required />
+        <label htmlFor="nv-x">Texto</label>
+        <textarea id="nv-x" value={nueva.texto} onChange={(e) => setNueva({ ...nueva, texto: e.target.value })} />
+        <button className="btn pri" style={{ marginTop: 16 }}>Publicar</button>
+      </form>
+      <Msg m={msg} />
+      <h2>Novedades</h2>
+      {lista.length === 0 && <p className="mu">Todavía no publicaste novedades.</p>}
+      {lista.map((n) => (
+        <div key={n.id} className="card" style={{ opacity: n.publicada ? 1 : 0.6 }}>
+          <label htmlFor={n.id + '-t'}>Título</label>
+          <input id={n.id + '-t'} value={n.titulo} onChange={(e) => editar(n.id, 'titulo', e.target.value)} />
+          <label htmlFor={n.id + '-x'}>Texto</label>
+          <textarea id={n.id + '-x'} value={n.texto} onChange={(e) => editar(n.id, 'texto', e.target.value)} />
+          <div className="row" style={{ marginTop: 12 }}>
+            <button type="button" className={'chip' + (n.publicada ? ' on' : '')} onClick={() => editar(n.id, 'publicada', !n.publicada)}>
+              {n.publicada ? 'Visible para los socios' : 'Oculta'}
+            </button>
+            <button type="button" className="btn" onClick={() => borrar(n)}>Eliminar</button>
+            <button type="button" className="btn pri" onClick={() => guardar(n)}>Guardar cambios</button>
           </div>
         </div>
       ))}

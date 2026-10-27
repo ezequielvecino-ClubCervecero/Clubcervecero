@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
+import MasVendidos from '../MasVendidos'
 
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
 const PAGO_TXT = Object.fromEntries(PAGOS)
@@ -41,6 +42,7 @@ export default function Tienda({ perfil }) {
   const [listo, setListo] = useState(null)
   const [abierta, setAbierta] = useState(false)
   const [version, setVersion] = useState(0)
+  const [masAbierto, setMasAbierto] = useState(false)
 
   const cargar = useCallback(async () => {
     const [s, p, c, sd] = await Promise.all([
@@ -114,6 +116,9 @@ export default function Tienda({ perfil }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
+      <Acordeon titulo="Más vendidos" icono="crown" abierto={masAbierto} onToggle={() => setMasAbierto((a) => !a)}>
+        <MasVendidos />
+      </Acordeon>
       {secciones.length === 0 && <p className="mu">La tienda no tiene secciones disponibles por ahora.</p>}
       <div className="chips">
         {secciones.map((s) => (
@@ -123,11 +128,14 @@ export default function Tienda({ perfil }) {
       {secciones.length > 0 && visibles.length === 0 && <p className="mu">No hay productos en esta sección.</p>}
       {visibles.map((p) => (
         <div key={p.id} className="card row">
-          <div style={{ flex: 1, minWidth: 150 }}>
+          <div className="row" style={{ flex: 1, minWidth: 190, flexWrap: 'nowrap', justifyContent: 'flex-start', gap: 12 }}>
+            {p.imagen_url && <img className="prod-img" src={p.imagen_url} alt={p.nombre} loading="lazy" />}
+            <div style={{ flex: 1, minWidth: 0 }}>
             <b>{p.nombre}</b>{p.formato ? <span className="mu"> · {p.formato}</span> : null}
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
             <p>{pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
             {p.stock <= 5 && <p className="mu">Quedan {p.stock}</p>}
+            </div>
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn" aria-label={'Quitar uno de ' + p.nombre} disabled={!carrito[p.id]} onClick={() => cambiar(p, -1)}>−</button>

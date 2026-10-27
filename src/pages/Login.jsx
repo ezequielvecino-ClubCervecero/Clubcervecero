@@ -7,6 +7,7 @@ export default function Login({ marca }) {
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [clave, setClave] = useState('')
+  const [referente, setReferente] = useState('')
   const [msg, setMsg] = useState(null)
   const [enviando, setEnviando] = useState(false)
 
@@ -16,7 +17,7 @@ export default function Login({ marca }) {
     setEnviando(true)
     const res = modo === 'ingresar'
       ? await supabase.auth.signInWithPassword({ email, password: clave })
-      : await supabase.auth.signUp({ email, password: clave, options: { data: { nombre } } })
+      : await supabase.auth.signUp({ email, password: clave, options: { data: { nombre, referente: referente.trim() } } })
     setEnviando(false)
     if (res.error) return setMsg({ tipo: 'error', texto: res.error.message })
     if (modo === 'registrarse' && !res.data.session) {
@@ -44,6 +45,9 @@ export default function Login({ marca }) {
           <>
             <label htmlFor="nombre">Nombre y apellido</label>
             <input id="nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+            <label htmlFor="referente">Número de socio o apodo de quien te invitó (opcional)</label>
+            <input id="referente" value={referente} onChange={(e) => setReferente(e.target.value)} />
+            <p className="mu" style={{ marginTop: 6 }}>Si lo escribís bien, esa persona suma 0,25 puntos cuando confirmes tu correo.</p>
           </>
         )}
         <label htmlFor="email">Correo</label>
