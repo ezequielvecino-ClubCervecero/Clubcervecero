@@ -9,8 +9,8 @@ const PAGO_TXT = Object.fromEntries(PAGOS)
 const ENTREGAS = [['retiro', 'Retiro en el local'], ['envio', 'Envío a domicilio']]
 const pesos = (n) => '$ ' + fmt(n)
 const ESTADOS = { pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Confirmado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
-// Cervecería de cada producto: la del productor, o la que cargó el administrador (Nito Bros).
-const cerveceriaDe = (p) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : p.cerveceria || 'Nito Bros')
+// Cervecería de cada producto: la del productor, o el nombre del club (se edita en Marca).
+const cerveceriaDe = (p, club) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : club || 'Club Cervecero')
 
 function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, totalPesos, totalPuntos, aviso }) {
   const L = []
@@ -50,7 +50,7 @@ export default function Tienda({ perfil }) {
     const [s, p, c, sd] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
       supabase.from('tienda_productos').select('*, productores(cerveceria)').eq('activo', true).gt('stock', 0).order('nombre'),
-      supabase.from('configuracion').select('whatsapp, aviso_envio').eq('id', 1).single(),
+      supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
     ])
     const vis = s.data || []
@@ -96,7 +96,7 @@ export default function Tienda({ perfil }) {
       const texto = armarMensaje({ ...snapshot, lineas: propias, numero: ped.numero, perfil, totalPesos: Number(ped.total_pesos), totalPuntos: Number(ped.total_puntos) })
       const destino = ped.productor_id ? ped.whatsapp : config.whatsapp
       return {
-        numero: ped.numero, productor: !!ped.productor_id, cerveceria: ped.cerveceria || 'Nito Bros',
+        numero: ped.numero, productor: !!ped.productor_id, cerveceria: ped.cerveceria || config.cerveceria_club || 'Club Cervecero',
         url: destino ? 'https://wa.me/' + destino + '?text=' + encodeURIComponent(texto) : null,
       }
     })
@@ -149,7 +149,7 @@ export default function Tienda({ perfil }) {
             {p.imagen_url && <img className="prod-img" src={p.imagen_url} alt={p.nombre} loading="lazy" />}
             <div style={{ flex: 1, minWidth: 0 }}>
             <b>{p.nombre}</b>{p.formato ? <span className="mu"> · {p.formato}</span> : null}
-            <p className="mu">Cervecería: <b>{cerveceriaDe(p)}</b></p>
+            <p className="mu">Cervecería: <b>{cerveceriaDe(p, config.cerveceria_club)}</b></p>
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
             <p>{pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
             {p.stock <= 5 && <p className="mu">Quedan {p.stock}</p>}
@@ -210,14 +210,14 @@ export default function Tienda({ perfil }) {
 
       <div style={{ marginTop: 18 }}>
         <Acordeon titulo="Mis pedidos" icono="barrel" abierto={abierta} onToggle={() => setAbierta((a) => !a)}>
-          <MisPedidos perfil={perfil} version={version} />
+          <MisPedidos perfil={perfil} version={version} club={config.cerveceria_club} />
         </Acordeon>
       </div>
     </>
   )
 }
 
-function MisPedidos({ perfil, version }) {
+function MisPedidos({ perfil, version, club }) {
   const [filas, setFilas] = useState(null)
   useEffect(() => {
     supabase.from('pedidos').select('*, pedido_items(*), productores(cerveceria)').eq('socio_id', perfil.id)
@@ -235,7 +235,7 @@ function MisPedidos({ perfil, version }) {
           <span className={'pill ' + clase}>{texto}</span>
         </div>
         <p className="mu">{fechaHora(p.creado_en)} · {PAGO_TXT[p.pago]}</p>
-        <p className="mu">Cervecería: {p.productor_id ? (p.productores && p.productores.cerveceria) || '-' : 'Nito Bros'}</p>
+        <p className="mu">Cervecería: {p.productor_id ? (p.productores && p.productores.cerveceria) || '-' : club || 'Club Cervecero'}</p>
         {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
         <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts' : pesos(p.total_pesos)}</p>
       </div>

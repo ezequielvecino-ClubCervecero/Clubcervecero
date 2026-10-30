@@ -13,23 +13,28 @@ const ESTADOS = {
 }
 const LIMITE_MIN = 30
 
+const mesTxt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+
 export default function Productor({ perfil }) {
-  const [vista, setVista] = useState('pedidos')
+  const [vista, setVista] = useState('inicio')
   const [pedidos, setPedidos] = useState(null)
   const [resumen, setResumen] = useState(null)
+  const [inicio, setInicio] = useState(null)
   const [datos, setDatos] = useState(undefined)
   const [error, setError] = useState(null)
 
   const cargar = useCallback(async () => {
-    const [p, r, d] = await Promise.all([
+    const [p, r, d, i] = await Promise.all([
       supabase.rpc('mis_pedidos_productor'),
       supabase.rpc('resumen_productores', { p_id: perfil.id }),
       supabase.from('productores').select('*').eq('id', perfil.id).maybeSingle(),
+      supabase.rpc('inicio_productor'),
     ])
-    setError(p.error ? p.error.message : null)
+    setError(p.error ? p.error.message : i.error ? i.error.message : null)
     setPedidos(p.data || [])
     setResumen(r.data && r.data[0] ? r.data[0] : null)
     setDatos(d.data || null)
+    setInicio(i.data || null)
   }, [perfil.id])
 
   // Se actualiza solo cada 30 segundos para que los pedidos nuevos aparezcan con el aviso.
@@ -43,12 +48,74 @@ export default function Productor({ perfil }) {
 
   return (
     <>
+      {vista === 'inicio' && <Inicio inicio={inicio} error={error} irA={setVista} />}
       {vista === 'pedidos' && <Pedidos pedidos={pedidos} resumen={resumen} datos={datos} error={error} recargar={cargar} />}
-      {vista === 'productos' && <Productos perfil={perfil} datos={datos} />}
+      {vista === 'productos' && <Productos perfil={perfil} datos={datos} oculto={!!(inicio && inicio.oculto)} />}
+      {vista === 'cuenta' && <Cuenta perfil={perfil} inicio={inicio} recargar={cargar} />}
       {vista === 'datos' && <Datos perfil={perfil} datos={datos} onGuardado={cargar} />}
       <Navegacion
-        items={[['pedidos', 'Pedidos', 'pint', pendientes], ['productos', 'Productos', 'barrel'], ['datos', 'Datos', 'hop']]}
+        items={[
+          ['inicio', 'Inicio', 'hop'], ['pedidos', 'Pedidos', 'pint', pendientes],
+          ['productos', 'Productos', 'barrel'], ['cuenta', 'Cuenta', 'crown'], ['datos', 'Datos', 'recarga'],
+        ]}
         actual={vista} onElegir={setVista} />
+    </>
+  )
+}
+
+// Lo primero que ve el productor: avisos y resumen del mes.
+function Inicio({ inicio, error, irA }) {
+  if (!inicio) return <><h2 style={{ marginTop: 6 }}>Inicio</h2>{error && <p className="msg error">{error}</p>}<p className="mu">Cargando...</p></>
+  const m = inicio.membresia
+  let aviso = null
+  if (m) {
+    const mes = mesTxt(m.periodo)
+    if (inicio.oculto) {
+      aviso = ['error', 'Tus productos están ocultos para los socios. Se vuelven a mostrar cuando el administrador valide el pago de la membresía de ' + mes + ' (' + pesos(m.monto) + ').']
+    } else if (m.estado === 'informada') {
+      aviso = ['ok', 'Informaste el pago de la membresía de ' + mes + '. Falta que el administrador lo valide.']
+    } else {
+      const d = m.dias_restantes
+      aviso = [d <= 5 ? 'error' : 'ok', 'Tenés que pagar la membresía de ' + mes + ': ' + pesos(m.monto) + '. ' +
+        (d > 0 ? 'Te quedan ' + d + (d === 1 ? ' día' : ' días') + ' antes de que se oculten tus productos.' : 'Hoy es el último día antes de que se oculten tus productos.')]
+    }
+  }
+  return (
+    <>
+      <h2 style={{ marginTop: 6 }}>Inicio</h2>
+      {error && <p className="msg error">{error}</p>}
+      {aviso && (
+        <div className="card" style={{ borderColor: 'var(--am)' }}>
+          <p className={'msg ' + aviso[0]}>{aviso[1]}</p>
+          <button className="btn pri" style={{ marginTop: 8 }} onClick={() => irA('cuenta')}>Ir a pagar</button>
+        </div>
+      )}
+      {inicio.pendientes > 0 && (
+        <div className="card" style={{ borderColor: 'var(--am)' }}>
+          <p><b>{inicio.pendientes}</b> {inicio.pendientes === 1 ? 'pedido espera' : 'pedidos esperan'} tu respuesta.</p>
+          <button className="btn pri" style={{ marginTop: 8 }} onClick={() => irA('pedidos')}>Ver pedidos</button>
+        </div>
+      )}
+      <div className="card">
+        <h3>Este mes</h3>
+        <p>Efectivo y transferencias recaudados: <b>{pesos(inicio.efectivo_mes)}</b></p>
+        <p>Puntos recibidos: <b className="pts">{fmt(inicio.puntos_mes)}</b> (equivalen a {pesos(inicio.puntos_mes_pesos)})</p>
+        <p>Ingreso del mes: <b>{pesos(inicio.ingreso_mes)}</b></p>
+      </div>
+      <div className="card">
+        <h3>Membresía de este mes</h3>
+        <p className="pts" style={{ fontSize: 28 }}>{pesos(inicio.cuota_estimada)}</p>
+        <p className="mu">
+          Estimada: es el {inicio.porcentaje}% de tu ingreso del mes (pesos más puntos). Sube con cada venta y queda firme cuando cierra el mes.
+        </p>
+      </div>
+      <div className="card">
+        <h3>Tus puntos</h3>
+        <p>Disponibles: <b className="pts">{fmt(inicio.puntos_disponibles)}</b> (equivalen a {pesos(inicio.puntos_disponibles_pesos)})</p>
+        {Number(inicio.valor_punto) === 0 && <p className="mu">El administrador todavía no cargó el valor del punto.</p>}
+        {inicio.canjes_pendientes > 0 && <p className="mu">Tenés {inicio.canjes_pendientes} canje(s) esperando aprobación.</p>}
+        <button className="btn" style={{ marginTop: 8 }} onClick={() => irA('cuenta')}>Canjear o pagar con puntos</button>
+      </div>
     </>
   )
 }
@@ -144,7 +211,7 @@ const datosProducto = (r) => ({
   imagen_url: r.imagen_url || null,
 })
 
-function Productos({ perfil, datos }) {
+function Productos({ perfil, datos, oculto }) {
   const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '', imagen_url: null }
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
@@ -196,6 +263,7 @@ function Productos({ perfil, datos }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Mis productos</h2>
+      {oculto && <p className="msg error">Tus productos están ocultos para los socios por la membresía vencida. Mirá Inicio.</p>}
       {sinNombre
         ? <p className="msg error">Primero cargá el nombre de tu cervecería en Datos: es el que ven los socios en cada producto.</p>
         : (
@@ -220,6 +288,105 @@ function Productos({ perfil, datos }) {
           </div>
         </div>
       ))}
+    </>
+  )
+}
+
+const ESTADO_MEM = { pendiente: ['warn', 'Pendiente'], informada: ['warn', 'Esperando validación'], pagada: ['ok', 'Pagada'] }
+const ESTADO_CANJE = { pendiente: ['warn', 'Pendiente'], aprobado: ['ok', 'Aprobado'], rechazado: ['bad', 'Rechazado'] }
+
+function Cuenta({ perfil, inicio, recargar }) {
+  const [canjes, setCanjes] = useState([])
+  const [mems, setMems] = useState([])
+  const [puntos, setPuntos] = useState('')
+  const [usar, setUsar] = useState({})
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const [c, m] = await Promise.all([
+      supabase.from('canjes_productor').select('*').eq('productor_id', perfil.id).order('creado_en', { ascending: false }).limit(20),
+      supabase.from('membresias_productor').select('*').eq('productor_id', perfil.id).order('periodo', { ascending: false }).limit(12),
+    ])
+    setCanjes(c.data || [])
+    setMems(m.data || [])
+  }, [perfil.id])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function pedirCanje(e) {
+    e.preventDefault()
+    setMsg(null)
+    const n = Number(puntos)
+    if (!Number.isFinite(n) || n <= 0) return setMsg({ tipo: 'error', texto: 'Poné cuántos puntos querés canjear.' })
+    const { error } = await supabase.rpc('pedir_canje', { p_puntos: n })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setPuntos('')
+    setMsg({ tipo: 'ok', texto: 'Pedido de canje enviado. Los puntos se descuentan cuando el administrador lo aprueba.' })
+    cargar(); recargar()
+  }
+
+  async function informarPago(m) {
+    setMsg(null)
+    const n = Number(usar[m.id] || 0)
+    if (!Number.isFinite(n) || n < 0) return setMsg({ tipo: 'error', texto: 'Cantidad de puntos inválida.' })
+    const { data, error } = await supabase.rpc('informar_pago_membresia', { p_id: m.id, p_puntos: n })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Pago informado con ' + fmt(n) + ' puntos. Te quedan ' + pesos(data) + ' para pagar en pesos; el administrador lo valida cuando los reciba.' })
+    cargar(); recargar()
+  }
+
+  return (
+    <>
+      <h2 style={{ marginTop: 6 }}>Cuenta</h2>
+      <Msg m={msg} />
+
+      <form className="card" onSubmit={pedirCanje}>
+        <h3>Canjear puntos por plata</h3>
+        <p>Disponibles: <b className="pts">{inicio ? fmt(inicio.puntos_disponibles) : '...'}</b>{inicio ? ' (equivalen a ' + pesos(inicio.puntos_disponibles_pesos) + ')' : ''}</p>
+        <p className="mu">Cada punto vale lo que valía el día que el socio lo gastó. Podés pedir todos los que tengas.</p>
+        <label htmlFor="cj-p">Puntos a canjear</label>
+        <input id="cj-p" type="number" min="0" step="0.01" value={puntos} onChange={(e) => setPuntos(e.target.value)} />
+        <button className="btn pri" style={{ marginTop: 12 }}>Pedir canje</button>
+      </form>
+      {canjes.length > 0 && (
+        <div className="card">
+          <h3>Mis canjes</h3>
+          {canjes.map((c) => {
+            const [clase, texto] = ESTADO_CANJE[c.estado]
+            return (
+              <div key={c.id} className="row" style={{ marginTop: 6 }}>
+                <span>{fechaHora(c.creado_en)} · {fmt(c.puntos)} pts · {pesos(c.monto_pesos != null ? c.monto_pesos : c.monto_estimado)}{c.estado === 'pendiente' ? ' (estimado)' : ''}</span>
+                <span className={'pill ' + clase}>{texto}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <h2>Membresías</h2>
+      <p className="mu">Cada mes pagás el {inicio ? inicio.porcentaje : '5'}% de lo que facturaste el mes anterior, en pesos y puntos. Podés pagar con tus puntos, con pesos o mezclando: lo que no cubran los puntos lo pagás en pesos.</p>
+      {mems.length === 0 && <p className="mu">Todavía no tenés membresías. La primera se genera el día 1 del mes siguiente a tu primera venta.</p>}
+      {mems.map((m) => {
+        const [clase, texto] = ESTADO_MEM[m.estado]
+        return (
+          <div key={m.id} className="card">
+            <div className="row"><b style={{ textTransform: 'capitalize' }}>{mesTxt(m.periodo)}</b><span className={'pill ' + clase}>{texto}</span></div>
+            <p>A pagar: <b>{pesos(m.monto)}</b></p>
+            <p className="mu">Ingreso del mes: {pesos(Number(m.ingreso_pesos) + Number(m.ingreso_puntos_pesos))} ({pesos(m.ingreso_pesos)} en pesos + {fmt(m.ingreso_puntos)} puntos = {pesos(m.ingreso_puntos_pesos)})</p>
+            {m.estado === 'pagada' && m.pagado_en && (
+              <p className="mu">Pagada el {fechaHora(m.pagado_en)}: {fmt(m.pagado_puntos)} puntos ({pesos(m.pagado_puntos_pesos)}) + {pesos(m.pagado_pesos)} en pesos.</p>
+            )}
+            {m.estado !== 'pagada' && (
+              <div style={{ marginTop: 8 }}>
+                {m.estado === 'informada' && <p className="mu">Informaste {fmt(m.informado_puntos)} puntos. Podés cambiarlo hasta que el administrador valide.</p>}
+                <label htmlFor={'mp-' + m.id}>Puntos que querés usar</label>
+                <input id={'mp-' + m.id} type="number" min="0" step="0.01" placeholder="0" value={usar[m.id] ?? ''}
+                  onChange={(e) => setUsar({ ...usar, [m.id]: e.target.value })} />
+                <button type="button" className="btn pri" style={{ marginTop: 12 }} onClick={() => informarPago(m)}>Informar pago</button>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </>
   )
 }
