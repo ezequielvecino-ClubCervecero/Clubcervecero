@@ -19,6 +19,8 @@ const ADMIN_MENU = [
   ['novedades', 'Novedades', 'Anuncios para los socios', 'hop'],
   ['cuota', 'Cuotas', 'Registrar pagos de cuota', 'crown'],
   ['ajuste', 'Ajustes y roles', 'Ajustar puntos y cambiar roles', 'hop'],
+  ['productores', 'Productores', 'Pedidos, ventas y avisos', 'pint'],
+  ['puntos', 'Puntos', 'Cuánto suma cada compra y referido', 'crown'],
   ['marca', 'Marca', 'Nombre, logos y WhatsApp', 'barrel'],
 ]
 
@@ -38,7 +40,8 @@ export default function Panel({ esAdmin, marca, onMarca }) {
 
   const contarPendientes = useCallback(async () => {
     const cuenta = (tabla) => supabase.from(tabla).select('id', { count: 'exact', head: true }).eq('estado', 'pendiente')
-    const [a, b] = await Promise.all([cuenta('pagos_informados'), cuenta('pedidos')])
+    // Los pedidos de los productores los responde cada productor: acá solo se cuentan los del club.
+    const [a, b] = await Promise.all([cuenta('pagos_informados'), cuenta('pedidos').is('productor_id', null)])
     setPendientes((a.count || 0) + (b.count || 0))
   }, [])
 
@@ -81,6 +84,8 @@ export default function Panel({ esAdmin, marca, onMarca }) {
           {sub === 'novedades' && <NovedadesAdmin />}
           {sub === 'cuota' && <Cuotas socios={soloSocios} recargar={cargarSocios} />}
           {sub === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
+          {sub === 'productores' && <ProductoresAdmin />}
+          {sub === 'puntos' && <PuntosAdmin />}
           {sub === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
         </>
       )}
@@ -319,6 +324,7 @@ function Ajustes({ socios, recargar }) {
         <select id="r-rol" value={r.rol} onChange={(e) => setR({ ...r, rol: e.target.value })}>
           <option value="socio">Socio</option>
           <option value="personal">Personal del local</option>
+          <option value="productor">Productor</option>
           <option value="admin">Administrador</option>
         </select>
         <button className="btn pri" style={{ marginTop: 16 }}>Cambiar rol</button>
@@ -561,7 +567,7 @@ function Cobros({ onCambio }) {
   const cargar = useCallback(async () => {
     const [a, b] = await Promise.all([
       supabase.from('pagos_informados').select('*, perfiles(numero_socio, nombre)').eq('estado', 'pendiente').order('creado_en'),
-      supabase.from('pedidos').select('*, perfiles(numero_socio, nombre), pedido_items(*)').eq('estado', 'pendiente').order('creado_en'),
+      supabase.from('pedidos').select('*, perfiles(numero_socio, nombre), pedido_items(*)').eq('estado', 'pendiente').is('productor_id', null).order('creado_en'),
     ])
     setPagos(a.data || [])
     setPedidos(b.data || [])
@@ -624,10 +630,11 @@ function Cobros({ onCambio }) {
   )
 }
 
-function CamposProducto({ r, set, secciones, id, onImagen }) {
+export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria }) {
   return (
     <div className="filtros">
       <div><label htmlFor={id + '-n'}>Nombre</label><input id={id + '-n'} value={r.nombre} onChange={(e) => set('nombre', e.target.value)} required /></div>
+      {conCerveceria && <div><label htmlFor={id + '-cv'}>Cervecería</label><input id={id + '-cv'} value={r.cerveceria ?? ''} onChange={(e) => set('cerveceria', e.target.value)} required /></div>}
       <div>
         <label htmlFor={id + '-s'}>Sección</label>
         <select id={id + '-s'} value={r.seccion} onChange={(e) => set('seccion', e.target.value)}>
@@ -653,7 +660,7 @@ function CamposProducto({ r, set, secciones, id, onImagen }) {
 }
 
 function TiendaAdmin() {
-  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '', imagen_url: null }
+  const vacio = { seccion: 'cervezas', cerveceria: 'Nito Bros', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '', imagen_url: null }
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
@@ -662,7 +669,7 @@ function TiendaAdmin() {
   const cargar = useCallback(async () => {
     const [s, p] = await Promise.all([
       supabase.from('tienda_secciones').select('*').order('orden'),
-      supabase.from('tienda_productos').select('*').order('seccion').order('nombre'),
+      supabase.from('tienda_productos').select('*').is('productor_id', null).order('seccion').order('nombre'),
     ])
     setSecciones(s.data || [])
     setLista(p.data || [])
@@ -672,6 +679,7 @@ function TiendaAdmin() {
   const editar = (id, campo, valor) => setLista((l) => l.map((r) => (r.id === id ? { ...r, [campo]: valor } : r)))
   const datos = (r) => ({
     seccion: r.seccion, nombre: r.nombre.trim(),
+    cerveceria: r.cerveceria && r.cerveceria.trim() ? r.cerveceria.trim() : 'Nito Bros',
     formato: r.formato && r.formato.trim() ? r.formato.trim() : null,
     descripcion: r.descripcion && r.descripcion.trim() ? r.descripcion.trim() : null,
     precio_pesos: Number(r.precio_pesos),
@@ -735,7 +743,7 @@ function TiendaAdmin() {
 
       <form className="card" onSubmit={agregar}>
         <h3>Agregar producto</h3>
-        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} id="nuevo"
+        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} id="nuevo" conCerveceria
           onImagen={(f) => cambiarImagen(f, (url) => setNuevo((n) => ({ ...n, imagen_url: url })))} />
         <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
       </form>
@@ -745,7 +753,7 @@ function TiendaAdmin() {
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
         <div key={r.id} className="card" style={{ opacity: r.activo ? 1 : 0.6 }}>
-          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} id={r.id}
+          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} id={r.id} conCerveceria
             onImagen={(f) => cambiarImagen(f, (url) => editar(r.id, 'imagen_url', url))} />
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" className={'chip' + (r.activo ? ' on' : '')} onClick={() => editar(r.id, 'activo', !r.activo)}>
@@ -781,7 +789,7 @@ function Facturacion() {
     setMsg(null)
     Promise.all([
       supabase.from('pedidos').select('*, perfiles(numero_socio, nombre), pedido_items(*)')
-        .eq('estado', 'confirmado').gte('resuelto_en', desde).lt('resuelto_en', hasta)
+        .eq('estado', 'confirmado').is('productor_id', null).gte('resuelto_en', desde).lt('resuelto_en', hasta)
         .order('resuelto_en', { ascending: false }),
       supabase.from('pagos_cuota').select('monto').gte('pagado_en', desde).lt('pagado_en', hasta),
     ]).then(([a, b]) => {
@@ -999,6 +1007,167 @@ function NovedadesAdmin() {
           </div>
         </div>
       ))}
+    </>
+  )
+}
+
+const CAMPOS_PUNTOS = [
+  ['bono_compra_miembro', 'Compra de un Miembro', 'Puntos que suma cada compra'],
+  ['bono_compra_gold', 'Compra de un Miembro Gold', 'Puntos que suma cada compra'],
+  ['bono_referido_miembro', 'Referido: invita un Miembro', 'Puntos que gana quien invita'],
+  ['bono_referido_gold', 'Referido: invita un Miembro Gold', 'Puntos que gana quien invita'],
+]
+
+function PuntosAdmin() {
+  const [v, setV] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    supabase.from('configuracion').select(CAMPOS_PUNTOS.map((c) => c[0]).join(',')).eq('id', 1).single()
+      .then(({ data, error }) => {
+        if (error) return setMsg({ tipo: 'error', texto: error.message })
+        setV(Object.fromEntries(CAMPOS_PUNTOS.map(([k]) => [k, String(data[k])])))
+      })
+  }, [])
+
+  async function guardar(e) {
+    e.preventDefault()
+    setMsg(null)
+    const nuevo = {}
+    for (const [k, titulo] of CAMPOS_PUNTOS) {
+      const n = Number(v[k])
+      if (v[k] === '' || !Number.isFinite(n) || n < 0 || n > 1000) {
+        return setMsg({ tipo: 'error', texto: '"' + titulo + '": poné un número entre 0 y 1000.' })
+      }
+      nuevo[k] = Math.round(n * 100) / 100
+    }
+    const { error } = await supabase.from('configuracion').update(nuevo).eq('id', 1)
+    setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Puntos guardados. Valen desde ahora para las compras y los referidos nuevos.' })
+  }
+
+  if (!v) return <><Msg m={msg} /><p className="mu">Cargando...</p></>
+
+  return (
+    <form className="card" onSubmit={guardar}>
+      <h3>Puntos que se suman</h3>
+      <p className="mu">
+        La compra suma por cada pedido confirmado en la tienda (del club o de un productor) y por cada compra extra que carga el personal.
+        El referido suma una vez, cuando el amigo confirma su correo. Lo ya acreditado no cambia.
+      </p>
+      <div className="filtros">
+        {CAMPOS_PUNTOS.map(([k, titulo, ayuda]) => (
+          <div key={k}>
+            <label htmlFor={'pt-' + k}>{titulo}</label>
+            <input id={'pt-' + k} type="number" min="0" max="1000" step="0.05" value={v[k]}
+              onChange={(e) => setV({ ...v, [k]: e.target.value })} required />
+            <p className="mu">{ayuda}</p>
+          </div>
+        ))}
+      </div>
+      <button className="btn pri" style={{ marginTop: 16 }}>Guardar</button>
+      <Msg m={msg} />
+    </form>
+  )
+}
+
+function ProductoresAdmin() {
+  const [lista, setLista] = useState(null)
+  const [ventas, setVentas] = useState({})
+  const [abierto, setAbierto] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const [ahora, setAhora] = useState(Date.now())
+
+  const cargar = useCallback(async () => {
+    const { data, error } = await supabase.rpc('resumen_productores')
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setLista(data || [])
+  }, [])
+
+  // Se refresca solo cada 30 segundos para ver los pedidos que esperan respuesta.
+  useEffect(() => {
+    cargar()
+    const t = setInterval(() => { cargar(); setAhora(Date.now()) }, 30000)
+    return () => clearInterval(t)
+  }, [cargar])
+
+  async function verVentas(id) {
+    if (abierto === id) return setAbierto(null)
+    setMsg(null)
+    const { data, error } = await supabase.rpc('ventas_productor', { p_productor: id })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setVentas((m) => ({ ...m, [id]: data || [] }))
+    setAbierto(id)
+  }
+
+  const aviso = (pr) => {
+    const texto = 'Hola! Tenés ' + pr.pendientes + (pr.pendientes === 1 ? ' pedido pendiente' : ' pedidos pendientes') +
+      ' en la app del club. Entrá y respondelo antes de que pasen los 30 minutos, si no se cancela solo.'
+    return 'https://wa.me/' + pr.whatsapp + '?text=' + encodeURIComponent(texto)
+  }
+
+  const porProducto = (filas) => {
+    const m = new Map()
+    filas.forEach((f) => {
+      const k = f.producto + (f.formato ? ' (' + f.formato + ')' : '')
+      m.set(k, (m.get(k) || 0) + f.cantidad)
+    })
+    return [...m.entries()].sort((a, b) => b[1] - a[1])
+  }
+
+  if (lista === null) return <><Msg m={msg} /><p className="mu">Cargando...</p></>
+
+  return (
+    <>
+      <h2 style={{ marginTop: 6 }}>Productores</h2>
+      <Msg m={msg} />
+      {lista.length === 0 && (
+        <p className="mu">Todavía no hay productores. En Ajustes y roles elegí un usuario y ponele el rol Productor.</p>
+      )}
+      {lista.map((pr) => {
+        const espera = pr.pendientes > 0 ? Math.floor((ahora - new Date(pr.mas_antiguo).getTime()) / 60000) : 0
+        const clase = pr.pendientes === 0 ? 'ok' : espera >= 20 ? 'bad' : 'warn'
+        const texto = pr.pendientes === 0 ? 'Sin pendientes' : pr.pendientes + ' pendiente' + (pr.pendientes === 1 ? '' : 's') + ' · hace ' + Math.max(0, espera) + ' min'
+        const filas = ventas[pr.id] || []
+        return (
+          <div key={pr.id} className="card">
+            <div className="row"><b>{pr.cerveceria || 'Sin nombre de cervecería'}</b><span className={'pill ' + clase}>{texto}</span></div>
+            <p className="mu">{pr.nombre || 'Sin nombre'} · {pr.whatsapp ? 'WhatsApp ' + pr.whatsapp : 'Sin WhatsApp cargado'}</p>
+            <p>Aceptados: <b>{pr.aceptados}</b> · Rechazados: <b>{pr.rechazados}</b> · Sin respuesta: <b>{pr.vencidos}</b></p>
+            <p>Puntos canjeados: <b className="pts">{fmt(pr.puntos_canjeados)}</b> · Ventas en pesos: <b>{pesos(pr.ventas_pesos)}</b></p>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button type="button" className="btn" onClick={() => verVentas(pr.id)}>{abierto === pr.id ? 'Ocultar ventas' : 'Ver ventas'}</button>
+              {pr.pendientes > 0 && pr.whatsapp && (
+                <a className="btn pri" href={aviso(pr)} target="_blank" rel="noreferrer">Avisar por WhatsApp</a>
+              )}
+            </div>
+            {abierto === pr.id && (
+              <div style={{ marginTop: 12 }}>
+                {filas.length === 0 && <p className="mu">Todavía no tiene ventas aceptadas.</p>}
+                {filas.length > 0 && (
+                  <>
+                    <h3>Total por producto</h3>
+                    {porProducto(filas).map(([k, n]) => <p key={k}>{n} × {k}</p>)}
+                    <h3 style={{ marginTop: 12 }}>Detalle (últimas {filas.length})</h3>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table>
+                        <thead><tr><th>Fecha</th><th>Pedido</th><th>Producto</th><th>Cant.</th></tr></thead>
+                        <tbody>
+                          {filas.map((f, i) => (
+                            <tr key={i}>
+                              <td>{fechaHora(f.fecha)}</td><td>{f.pedido}</td>
+                              <td>{f.producto}{f.formato ? ' (' + f.formato + ')' : ''}</td><td>{f.cantidad}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </>
   )
 }

@@ -4,6 +4,7 @@ import { Icon } from './ui'
 import Login from './pages/Login'
 import Socio from './pages/Socio'
 import Panel from './pages/Panel'
+import Productor from './pages/Productor'
 
 const MARCA_BASE = {
   nombre_app: 'Club Cervecero',
@@ -12,7 +13,7 @@ const MARCA_BASE = {
   logo_app_url: null,
 }
 
-const ROLES = { socio: 'Socio', personal: 'Personal del local', admin: 'Administrador' }
+const ROLES = { socio: 'Socio', personal: 'Personal del local', admin: 'Administrador', productor: 'Productor' }
 
 export default function App() {
   const [session, setSession] = useState(undefined) // undefined = todavia cargando
@@ -60,6 +61,7 @@ export default function App() {
       </header>
       {perfil.rol === 'socio' && <Socio perfil={perfil} />}
       {perfil.rol === 'personal' && <Panel esAdmin={false} />}
+      {perfil.rol === 'productor' && <Productor perfil={perfil} />}
       {perfil.rol === 'admin' && <Panel esAdmin marca={marca} onMarca={cargarMarca} />}
     </>
   )

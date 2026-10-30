@@ -8,7 +8,9 @@ const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transfer
 const PAGO_TXT = Object.fromEntries(PAGOS)
 const ENTREGAS = [['retiro', 'Retiro en el local'], ['envio', 'Envío a domicilio']]
 const pesos = (n) => '$ ' + fmt(n)
-const ESTADOS = { pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Confirmado'], cancelado: ['bad', 'Cancelado'] }
+const ESTADOS = { pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Confirmado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
+// Cervecería de cada producto: la del productor, o la que cargó el administrador (Nito Bros).
+const cerveceriaDe = (p) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : p.cerveceria || 'Nito Bros')
 
 function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, totalPesos, totalPuntos, aviso }) {
   const L = []
@@ -47,7 +49,7 @@ export default function Tienda({ perfil }) {
   const cargar = useCallback(async () => {
     const [s, p, c, sd] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
-      supabase.from('tienda_productos').select('*').eq('activo', true).gt('stock', 0).order('nombre'),
+      supabase.from('tienda_productos').select('*, productores(cerveceria)').eq('activo', true).gt('stock', 0).order('nombre'),
       supabase.from('configuracion').select('whatsapp, aviso_envio').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
     ])
@@ -76,6 +78,7 @@ export default function Tienda({ perfil }) {
   const puntosOk = sePuedePuntos && saldo >= totalPuntos
   const pagoValido = pago !== 'puntos' || puntosOk
   const direccionOk = entrega === 'retiro' || direccion.trim().length > 4
+  const vendedores = new Set(lineas.map((l) => l.productor_id || '')).size
 
   async function confirmar() {
     setMsg(null)
@@ -87,9 +90,17 @@ export default function Tienda({ perfil }) {
     })
     setEnviando(false)
     if (error) { await cargar(); return setMsg({ tipo: 'error', texto: error.message }) }
-    const texto = armarMensaje({ ...snapshot, numero: data.numero, perfil })
-    const url = config.whatsapp ? 'https://wa.me/' + config.whatsapp + '?text=' + encodeURIComponent(texto) : null
-    setListo({ numero: data.numero, url })
+    // Un pedido por cervecería: cada uno lleva su propio mensaje, al WhatsApp de quien lo atiende.
+    const hechos = (data.pedidos || []).map((ped) => {
+      const propias = lineas.filter((l) => (l.productor_id || null) === (ped.productor_id || null))
+      const texto = armarMensaje({ ...snapshot, lineas: propias, numero: ped.numero, perfil, totalPesos: Number(ped.total_pesos), totalPuntos: Number(ped.total_puntos) })
+      const destino = ped.productor_id ? ped.whatsapp : config.whatsapp
+      return {
+        numero: ped.numero, productor: !!ped.productor_id, cerveceria: ped.cerveceria || 'Nito Bros',
+        url: destino ? 'https://wa.me/' + destino + '?text=' + encodeURIComponent(texto) : null,
+      }
+    })
+    setListo(hechos)
     setCarrito({})
     setDireccion('')
     setVersion((v) => v + 1)
@@ -99,13 +110,19 @@ export default function Tienda({ perfil }) {
   if (listo) {
     return (
       <div className="card" style={{ borderColor: 'var(--am)' }}>
-        <h3>Pedido N.º {listo.numero} hecho</h3>
+        <h3>{listo.length === 1 ? 'Pedido N.º ' + listo[0].numero + ' hecho' : 'Hiciste ' + listo.length + ' pedidos'}</h3>
         <p className="mu" style={{ margin: '8px 0 12px' }}>
-          Quedó pendiente hasta que el local lo confirme. Mandanos el detalle por WhatsApp para coordinar.
+          Quedan pendientes hasta que cada cervecería los confirme. Mandá el detalle por WhatsApp para coordinar.
         </p>
-        {listo.url
-          ? <a className="btn pri" href={listo.url} target="_blank" rel="noreferrer">Enviar por WhatsApp</a>
-          : <p className="msg error">El negocio todavía no cargó su número de WhatsApp. Avisale al local en persona.</p>}
+        {listo.map((h) => (
+          <div key={h.numero} className="card">
+            <b>Pedido N.º {h.numero} · {h.cerveceria}</b>
+            {h.productor && <p className="mu">Tiene 30 minutos para aceptarlo. Si no responde, se cancela solo y se devuelven stock y puntos.</p>}
+            {h.url
+              ? <a className="btn pri" style={{ marginTop: 8 }} href={h.url} target="_blank" rel="noreferrer">Enviar por WhatsApp</a>
+              : <p className="msg error">{h.productor ? 'Esta cervecería todavía no cargó su WhatsApp, pero el pedido ya le llegó a la app.' : 'El negocio todavía no cargó su número de WhatsApp. Avisale al local en persona.'}</p>}
+          </div>
+        ))}
         <div style={{ marginTop: 12 }}><button className="btn" onClick={() => setListo(null)}>Seguir comprando</button></div>
       </div>
     )
@@ -132,6 +149,7 @@ export default function Tienda({ perfil }) {
             {p.imagen_url && <img className="prod-img" src={p.imagen_url} alt={p.nombre} loading="lazy" />}
             <div style={{ flex: 1, minWidth: 0 }}>
             <b>{p.nombre}</b>{p.formato ? <span className="mu"> · {p.formato}</span> : null}
+            <p className="mu">Cervecería: <b>{cerveceriaDe(p)}</b></p>
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
             <p>{pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
             {p.stock <= 5 && <p className="mu">Quedan {p.stock}</p>}
@@ -148,6 +166,7 @@ export default function Tienda({ perfil }) {
       {lineas.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--am)' }}>
           <h3>Tu pedido</h3>
+          {vendedores > 1 && <p className="mu">Tu carrito tiene productos de {vendedores} cervecerías: se hacen {vendedores} pedidos separados y cada cervecería confirma el suyo.</p>}
           {lineas.map((l) => (
             <div key={l.id} className="row" style={{ marginTop: 6 }}>
               <span>{l.cantidad} × {l.nombre}{l.formato ? ' (' + l.formato + ')' : ''}</span>
@@ -201,7 +220,7 @@ export default function Tienda({ perfil }) {
 function MisPedidos({ perfil, version }) {
   const [filas, setFilas] = useState(null)
   useEffect(() => {
-    supabase.from('pedidos').select('*, pedido_items(*)').eq('socio_id', perfil.id)
+    supabase.from('pedidos').select('*, pedido_items(*), productores(cerveceria)').eq('socio_id', perfil.id)
       .order('creado_en', { ascending: false }).limit(10)
       .then(({ data }) => setFilas(data || []))
   }, [perfil.id, version])
@@ -216,6 +235,7 @@ function MisPedidos({ perfil, version }) {
           <span className={'pill ' + clase}>{texto}</span>
         </div>
         <p className="mu">{fechaHora(p.creado_en)} · {PAGO_TXT[p.pago]}</p>
+        <p className="mu">Cervecería: {p.productor_id ? (p.productores && p.productores.cerveceria) || '-' : 'Nito Bros'}</p>
         {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
         <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts' : pesos(p.total_pesos)}</p>
       </div>
