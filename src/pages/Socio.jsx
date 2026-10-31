@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { QRCodeSVG } from 'qrcode.react'
 import { Icon, Coin, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, fechaHora, TIPOS } from '../ui'
 import Tienda from './Tienda'
+import Puesto from '../Puesto'
 
 const COSTO_TRANSFERENCIA = 0.5
 const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
@@ -44,7 +45,7 @@ function Inicio({ perfil }) {
   return (
     <>
       <div className="member">
-        <h2 style={{ margin: 0 }}>{p.nombre || 'Socio'}</h2>
+        <h2 style={{ margin: 0 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.apodo && <p className="mu">Apodo: {p.apodo}</p>}
@@ -58,6 +59,7 @@ function Inicio({ perfil }) {
         <span>{e.texto}</span>
       </div>
 
+      <PedidosEnCamino perfil={perfil} />
       <ProximoEvento />
       <Novedades />
     </>
@@ -104,12 +106,12 @@ function Ranking({ p }) {
 
   return (
     <>
-      <p className="mu">Puntos usados en canjes y compras con puntos en {mes}. Se reinicia solo cada mes. Solo aparecen los socios que eligieron un apodo.</p>
+      <p className="mu">Puntos usados en canjes y compras con puntos en {mes}. Se reinicia solo cada mes. Las flechas comparan con el mes anterior. Solo aparecen los socios que eligieron un apodo.</p>
       {!p.apodo && <p className="msg error">Elegí tu apodo en Perfil, Mi apodo, para aparecer en el ranking.</p>}
       {filas && filas.length === 0 && <p className="mu">Todavía nadie usó puntos este mes.</p>}
       {(filas || []).map((f) => (
         <div key={f.posicion} className={'card row' + (f.es_mio ? ' mio' : '')}>
-          <span><b>{f.posicion}.</b> {f.apodo}{f.es_mio ? ' (vos)' : ''}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Puesto pos={f.posicion} anterior={f.pos_anterior} /> {f.apodo}{f.es_mio ? ' (vos)' : ''}</span>
           <span className="pts plus">{fmt(f.puntos)}</span>
         </div>
       ))}
@@ -193,7 +195,7 @@ function Perfil({ perfil }) {
   return (
     <>
       <div className="card">
-        <h2 style={{ margin: 0 }}>{p.nombre || 'Socio'}</h2>
+        <h2 style={{ margin: 0 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.apodo && <p className="mu">Apodo: {p.apodo}</p>}
@@ -202,6 +204,10 @@ function Perfil({ perfil }) {
 
       <Acordeon titulo="Informar pago" icono="crown" abierto={abierta === 'pago'} onToggle={() => alternar('pago')}>
         <InformarPago />
+      </Acordeon>
+
+      <Acordeon titulo="Mis datos" icono="crown" abierto={abierta === 'datos'} onToggle={() => alternar('datos')}>
+        <MisDatos p={p} onListo={cargar} />
       </Acordeon>
 
       <Acordeon titulo="Mi apodo" icono="hop" abierto={abierta === 'apodo'} onToggle={() => alternar('apodo')}>
@@ -423,5 +429,56 @@ function Novedades() {
         </div>
       ))}
     </>
+  )
+}
+
+// Pedidos que el vendedor ya aceptó y todavía no se entregaron.
+function PedidosEnCamino({ perfil }) {
+  const [filas, setFilas] = useState([])
+  useEffect(() => {
+    supabase.from('pedidos').select('id, numero, entrega, productor_id, productores(cerveceria)')
+      .eq('socio_id', perfil.id).eq('estado', 'aceptado').order('creado_en')
+      .then(({ data }) => setFilas(data || []))
+  }, [perfil.id])
+  if (filas.length === 0) return null
+  return (
+    <>
+      <h2>Tus pedidos</h2>
+      {filas.map((f) => (
+        <div key={f.id} className="card row">
+          <div>
+            <b>Pedido N.º {f.numero}</b>
+            {f.productor_id && f.productores && <p className="mu">{f.productores.cerveceria}</p>}
+          </div>
+          <span className="pill warn">{f.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}</span>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function MisDatos({ p, onListo }) {
+  const [nombre, setNombre] = useState(p.nombre || '')
+  const [apellido, setApellido] = useState(p.apellido || '')
+  const [msg, setMsg] = useState(null)
+
+  async function guardar(e) {
+    e.preventDefault()
+    setMsg(null)
+    const { error } = await supabase.rpc('guardar_mis_datos', { p_nombre: nombre, p_apellido: apellido })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Datos guardados.' })
+    onListo()
+  }
+
+  return (
+    <form onSubmit={guardar}>
+      <label htmlFor="md-n">Nombre</label>
+      <input id="md-n" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+      <label htmlFor="md-a">Apellido</label>
+      <input id="md-a" value={apellido} onChange={(e) => setApellido(e.target.value)} />
+      <button className="btn pri" style={{ marginTop: 12 }}>Guardar</button>
+      <Msg m={msg} />
+    </form>
   )
 }

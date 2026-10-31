@@ -7,16 +7,13 @@ import Escaner from '../Escaner'
 import MasVendidos from '../MasVendidos'
 import { subirImagenProducto } from '../imagenes'
 import Movimientos from './Movimientos'
+import TiendaControl from '../TiendaControl'
 
-const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${s.nombre || 'Sin nombre'}`
+const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${[s.nombre, s.apellido].filter(Boolean).join(' ') || 'Sin nombre'}`
 
 const ADMIN_MENU = [
   ['socios', 'Socios', 'Puntos y cuota de cada socio', 'crown'],
-  ['premios', 'Premios', 'Catálogo de canjes con puntos', 'gift'],
-  ['tienda', 'Tienda', 'Productos, stock y secciones', 'pint'],
   ['facturacion', 'Facturación', 'Ventas del mes con detalle', 'crown'],
-  ['eventos', 'Eventos', 'Próximos eventos del club', 'gift'],
-  ['novedades', 'Novedades', 'Anuncios para los socios', 'hop'],
   ['cuota', 'Cuotas', 'Registrar pagos de cuota', 'crown'],
   ['ajuste', 'Ajustes y roles', 'Ajustar puntos y cambiar roles', 'hop'],
   ['productores', 'Productores', 'Pedidos, ventas y avisos', 'pint'],
@@ -24,16 +21,26 @@ const ADMIN_MENU = [
   ['marca', 'Marca', 'Nombre, logos y WhatsApp', 'barrel'],
 ]
 
+// El administrador, al tocar Cargar, elige qué cargar.
+const CARGA_MENU = [
+  ['puntos', 'Cargar puntos', 'Litros y compras extras de un socio', 'recarga'],
+  ['premios', 'Premios', 'Catálogo de canjes con puntos', 'gift'],
+  ['tienda', 'Tienda', 'Productos, stock y secciones', 'pint'],
+  ['eventos', 'Eventos', 'Eventos del club, anotados y Eventos de Cerveceros', 'crown'],
+  ['novedades', 'Novedades', 'Anuncios para los socios', 'hop'],
+]
+
 export default function Panel({ esAdmin, marca, onMarca }) {
   const [vista, setVista] = useState(esAdmin ? 'cobros' : 'carga')
   const [sub, setSub] = useState(null)
+  const [subCarga, setSubCarga] = useState(null)
   const [socios, setSocios] = useState([])
   const [pendientes, setPendientes] = useState(0)
 
   const cargarSocios = useCallback(async () => {
     const { data } = await supabase
       .from('perfiles')
-      .select('id, nombre, numero_socio, rol, cuota_pagada_hasta')
+      .select('id, nombre, apellido, numero_socio, rol, cuota_pagada_hasta')
       .order('numero_socio')
     setSocios(data || [])
   }, [])
@@ -57,9 +64,35 @@ export default function Panel({ esAdmin, marca, onMarca }) {
 
   return (
     <>
-      {vista === 'carga' && <Carga />}
+      {vista === 'carga' && (!esAdmin || subCarga === 'puntos') && (
+        <>
+          {esAdmin && <button type="button" className="btn" style={{ marginBottom: 12 }} onClick={() => setSubCarga(null)}>← Volver a Cargar</button>}
+          <Carga />
+        </>
+      )}
+      {vista === 'carga' && esAdmin && !subCarga && (
+        <>
+          <h2 style={{ marginTop: 6 }}>Cargar</h2>
+          <div className="menu-admin">
+            {CARGA_MENU.map(([id, titulo, desc, icono]) => (
+              <button key={id} type="button" className="card menu-card" onClick={() => setSubCarga(id)}>
+                <Icon name={icono} size={22} /><b>{titulo}</b><span className="mu">{desc}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {vista === 'carga' && esAdmin && subCarga && subCarga !== 'puntos' && (
+        <>
+          <button type="button" className="btn" style={{ marginBottom: 12 }} onClick={() => setSubCarga(null)}>← Volver a Cargar</button>
+          {subCarga === 'premios' && <Premios />}
+          {subCarga === 'tienda' && <TiendaAdmin />}
+          {subCarga === 'eventos' && <EventosAdmin />}
+          {subCarga === 'novedades' && <NovedadesAdmin />}
+        </>
+      )}
       {vista === 'cupon' && <Cupon />}
-      {vista === 'cobros' && <Cobros onCambio={contarPendientes} />}
+      {vista === 'cobros' && <Cobros onCambio={contarPendientes} esAdmin={esAdmin} />}
       {vista === 'mov' && <Movimientos socios={socios} />}
       {vista === 'admin' && esAdmin && !sub && (
         <>
@@ -77,11 +110,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
         <>
           <button type="button" className="btn" style={{ marginBottom: 12 }} onClick={() => setSub(null)}>← Volver al menú</button>
           {sub === 'socios' && <Socios />}
-          {sub === 'premios' && <Premios />}
-          {sub === 'tienda' && <TiendaAdmin />}
           {sub === 'facturacion' && <Facturacion />}
-          {sub === 'eventos' && <EventosAdmin />}
-          {sub === 'novedades' && <NovedadesAdmin />}
           {sub === 'cuota' && <Cuotas socios={soloSocios} recargar={cargarSocios} />}
           {sub === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
           {sub === 'productores' && <ProductoresAdmin />}
@@ -89,7 +118,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
           {sub === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
         </>
       )}
-      <Navegacion items={items} actual={vista} onElegir={(id) => { setVista(id); setSub(null) }} />
+      <Navegacion items={items} actual={vista} onElegir={(id) => { setVista(id); setSub(null); setSubCarga(null) }} />
     </>
   )
 }
@@ -426,21 +455,66 @@ function cuotaPill(s) {
   return vencida ? ['warn', 'Vencida'] : ['ok', 'Al día']
 }
 
+const ESTADO_PEDIDO = {
+  pendiente: 'Pendiente', aceptado: 'En proceso', confirmado: 'Entregado', no_entregado: 'No entregado',
+  rechazado: 'Rechazado', vencido: 'Sin respuesta', cancelado: 'Cancelado',
+}
+
+function HistorialSocio({ socio }) {
+  const [filas, setFilas] = useState(null)
+  const [msg, setMsg] = useState(null)
+  useEffect(() => {
+    supabase.rpc('historial_socio', { p_socio: socio.id }).then(({ data, error }) => {
+      if (error) return setMsg({ tipo: 'error', texto: error.message })
+      setFilas(data || [])
+    })
+  }, [socio.id])
+
+  return (
+    <div className="card" style={{ borderColor: 'var(--am)' }}>
+      <h3>Historial de {etiqueta(socio)}</h3>
+      <Msg m={msg} />
+      {filas === null && !msg && <p className="mu">Cargando...</p>}
+      {filas && filas.length === 0 && <p className="mu">Este socio todavía no tiene movimientos.</p>}
+      {(filas || []).map((f, i) => (
+        <div key={i} className="card row">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <b>{f.titulo}</b>{f.estado && <span className={'pill ' + (f.estado === 'confirmado' ? 'ok' : f.estado === 'pendiente' || f.estado === 'aceptado' ? 'warn' : 'bad')} style={{ marginLeft: 8 }}>{ESTADO_PEDIDO[f.estado] || f.estado}</span>}
+            <p className="mu">{fechaHora(f.fecha)}</p>
+            {f.detalle && <p className="mu">{f.detalle}</p>}
+          </div>
+          <span className="pts">
+            {f.pesos != null && pesos(f.pesos)}
+            {f.pesos != null && f.puntos != null && ' · '}
+            {f.puntos != null && ((f.tipo === 'compra' ? '' : f.puntos > 0 ? '+' : '') + fmt(f.puntos) + ' pts')}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Socios() {
   const [lista, setLista] = useState([])
   const [orden, setOrden] = useState('acumulado')
   const [msg, setMsg] = useState(null)
   const [version, setVersion] = useState(0)
+  const [historial, setHistorial] = useState(null)
 
   useEffect(() => {
-    supabase.rpc('resumen_socios').then(({ data, error }) => {
-      if (error) return setMsg({ tipo: 'error', texto: error.message })
-      setLista(data || [])
+    Promise.all([
+      supabase.rpc('resumen_socios'),
+      supabase.from('perfiles').select('id, apellido'),
+    ]).then(([r, a]) => {
+      if (r.error) return setMsg({ tipo: 'error', texto: r.error.message })
+      const ap = Object.fromEntries((a.data || []).map((x) => [x.id, x.apellido]))
+      setLista((r.data || []).map((s) => ({ ...s, apellido: ap[s.id] || '' })))
     })
   }, [version])
 
   const ordenada = [...lista].sort((a, b) =>
     orden === 'numero' ? a.numero_socio - b.numero_socio : Number(b[orden]) - Number(a[orden]))
+  const elegido = lista.find((s) => s.id === historial)
 
   return (
     <div className="card">
@@ -453,9 +527,10 @@ function Socios() {
         ))}
       </div>
       <Msg m={msg} />
+      {elegido && <HistorialSocio socio={elegido} />}
       <div className="scroll">
         <table>
-          <thead><tr><th>#</th><th>Socio</th><th>Puntos actuales</th><th>Puntos adquiridos</th><th>Cuota</th><th>Categoría</th></tr></thead>
+          <thead><tr><th>#</th><th>Socio</th><th>Puntos actuales</th><th>Puntos adquiridos</th><th>Cuota</th><th>Categoría</th><th></th></tr></thead>
           <tbody>
             {ordenada.map((s, i) => {
               const [clase, texto] = cuotaPill(s)
@@ -467,6 +542,7 @@ function Socios() {
                   <td>{fmt(s.acumulado)}</td>
                   <td><span className={'pill ' + clase}>{texto}</span></td>
                   <td><Categoria valor={s.categoria} /></td>
+                  <td><button type="button" className="btn" onClick={() => { setHistorial(historial === s.id ? null : s.id); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>{historial === s.id ? 'Ocultar' : 'Historial'}</button></td>
                 </tr>
               )
             })}
@@ -557,7 +633,7 @@ function Marca({ marca, onGuardado }) {
 const PAGO_TXT = { efectivo: 'Efectivo en el local', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + fmt(n)
 
-function Cobros({ onCambio }) {
+function Cobros({ onCambio, esAdmin }) {
   const [pagos, setPagos] = useState([])
   const [pedidos, setPedidos] = useState([])
   const [msg, setMsg] = useState(null)
@@ -565,7 +641,7 @@ function Cobros({ onCambio }) {
   const cargar = useCallback(async () => {
     const [a, b] = await Promise.all([
       supabase.from('pagos_informados').select('*, perfiles(numero_socio, nombre)').eq('estado', 'pendiente').order('creado_en'),
-      supabase.from('pedidos').select('*, perfiles(numero_socio, nombre), pedido_items(*)').eq('estado', 'pendiente').is('productor_id', null).order('creado_en'),
+      supabase.from('pedidos').select('*, perfiles(numero_socio, nombre, apellido), pedido_items(*)').in('estado', ['pendiente', 'aceptado']).is('productor_id', null).order('creado_en'),
     ])
     setPagos(a.data || [])
     setPedidos(b.data || [])
@@ -585,16 +661,25 @@ function Cobros({ onCambio }) {
     resolver(supabase.rpc('resolver_pago_informado', { p_id: id, p_confirmar: confirmar }),
       confirmar ? 'Pago confirmado: la cuota del socio se actualizó.' : 'Aviso de pago rechazado.')
 
+  const MENSAJES = {
+    aceptar: 'Pedido aceptado: el socio ya ve que está en proceso.',
+    entregar: 'Pedido entregado: se cobró, se descontaron los puntos y cuenta en la facturación.',
+    no_entregado: 'Marcado como no entregado: se devolvió el stock y se liberaron los puntos.',
+    cancelar: 'Pedido cancelado: stock devuelto.',
+  }
   const resolverPedido = (id, accion) => {
     if (accion === 'cancelar' && !window.confirm('¿Cancelar el pedido? Se devuelven el stock y, si pagó con puntos, los puntos.')) return
-    return resolver(supabase.rpc('resolver_pedido', { p_id: id, p_accion: accion }),
-      accion === 'confirmar' ? 'Pedido confirmado.' : 'Pedido cancelado: stock devuelto.')
+    if (accion === 'no_entregado' && !window.confirm('¿Marcar el pedido como no entregado? No se cobra ni cuenta en la facturación.')) return
+    return resolver(supabase.rpc('resolver_pedido', { p_id: id, p_accion: accion }), MENSAJES[accion])
   }
 
-  const quien = (p) => 'Socio N.º ' + String(p.perfiles.numero_socio).padStart(4, '0') + ' · ' + (p.perfiles.nombre || 'Sin nombre')
+  const porAceptar = pedidos.filter((p) => p.estado === 'pendiente')
+  const enProceso = pedidos.filter((p) => p.estado === 'aceptado')
+  const quien = (p) => 'Socio N.º ' + String(p.perfiles.numero_socio).padStart(4, '0') + ' · ' + ([p.perfiles.nombre, p.perfiles.apellido].filter(Boolean).join(' ') || 'Sin nombre')
 
   return (
     <>
+      {esAdmin && <TiendaControl titulo="Tienda del club" propia={false} />}
       <h2 style={{ marginTop: 6 }}>Pagos de cuota informados</h2>
       {pagos.length === 0 && <p className="mu">No hay avisos de pago pendientes.</p>}
       {pagos.map((p) => (
@@ -608,18 +693,34 @@ function Cobros({ onCambio }) {
         </div>
       ))}
 
-      <h2>Pedidos de la tienda</h2>
-      {pedidos.length === 0 && <p className="mu">No hay pedidos pendientes.</p>}
-      {pedidos.map((p) => (
+      <h2>Pedidos por aceptar</h2>
+      {porAceptar.length === 0 && <p className="mu">No hay pedidos pendientes.</p>}
+      {porAceptar.map((p) => (
         <div key={p.id} className="card">
           <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.creado_en)}</span></div>
           <p>{quien(p)}</p>
           {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
-          <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (ya descontados)' : pesos(p.total_pesos)}</p>
+          <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
           <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}</p>
           <div className="row" style={{ marginTop: 10 }}>
             <button className="btn" onClick={() => resolverPedido(p.id, 'cancelar')}>Cancelar pedido</button>
-            <button className="btn pri" onClick={() => resolverPedido(p.id, 'confirmar')}>{p.pago === 'puntos' ? 'Confirmar entrega' : 'Confirmar pago y entrega'}</button>
+            <button className="btn pri" onClick={() => resolverPedido(p.id, 'aceptar')}>Aceptar pedido</button>
+          </div>
+        </div>
+      ))}
+
+      <h2>Pedidos en proceso</h2>
+      {enProceso.length === 0 && <p className="mu">No hay pedidos en proceso.</p>}
+      {enProceso.map((p) => (
+        <div key={p.id} className="card">
+          <div className="row"><b>Pedido N.º {p.numero}</b><span className="pill warn">{p.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}</span></div>
+          <p>{quien(p)}</p>
+          {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+          <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
+          <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}. Al marcar entregado se cobra, se descuentan los puntos y cuenta en la facturación.</p>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button className="btn" onClick={() => resolverPedido(p.id, 'no_entregado')}>No entregado</button>
+            <button className="btn pri" onClick={() => resolverPedido(p.id, 'entregar')}>Entregado</button>
           </div>
         </div>
       ))}
@@ -641,7 +742,10 @@ export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria 
       </div>
       <div><label htmlFor={id + '-f'}>Formato</label><input id={id + '-f'} placeholder="1 litro" value={r.formato ?? ''} onChange={(e) => set('formato', e.target.value)} /></div>
       <div><label htmlFor={id + '-p'}>Precio ($)</label><input id={id + '-p'} type="number" min="0" step="1" value={r.precio_pesos} onChange={(e) => set('precio_pesos', e.target.value)} required /></div>
-      <div><label htmlFor={id + '-pp'}>Precio en puntos (opcional)</label><input id={id + '-pp'} type="number" min="0" step="0.25" value={r.precio_puntos ?? ''} onChange={(e) => set('precio_puntos', e.target.value)} /></div>
+      <div>
+        <label>Precio en puntos</label>
+        <p className="mu">{r.precio_puntos != null ? fmt(r.precio_puntos) + ' pts (automático)' : 'Automático: 90% del precio, con el valor del punto'}</p>
+      </div>
       <div><label htmlFor={id + '-st'}>Stock (unidades)</label><input id={id + '-st'} type="number" min="0" step="1" value={r.stock} onChange={(e) => set('stock', e.target.value)} required /></div>
       <div style={{ gridColumn: '1 / -1' }}>
         <label htmlFor={id + '-i'}>Imagen (opcional, se reduce sola para que sea liviana)</label>
@@ -658,7 +762,7 @@ export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria 
 }
 
 function TiendaAdmin() {
-  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '', imagen_url: null }
+  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
@@ -680,7 +784,6 @@ function TiendaAdmin() {
     formato: r.formato && r.formato.trim() ? r.formato.trim() : null,
     descripcion: r.descripcion && r.descripcion.trim() ? r.descripcion.trim() : null,
     precio_pesos: Number(r.precio_pesos),
-    precio_puntos: r.precio_puntos === '' || r.precio_puntos == null ? null : Number(r.precio_puntos),
     stock: Math.max(0, Math.floor(Number(r.stock || 0))),
     imagen_url: r.imagen_url || null,
   })
@@ -790,8 +893,8 @@ function Facturacion() {
         .eq('estado', 'confirmado').is('productor_id', null).gte('resuelto_en', desde).lt('resuelto_en', hasta)
         .order('resuelto_en', { ascending: false }),
       supabase.from('pagos_cuota').select('monto').gte('pagado_en', desde).lt('pagado_en', hasta),
-      supabase.from('membresias_productor').select('pagado_pesos, pagado_puntos, pagado_puntos_pesos')
-        .eq('estado', 'pagada').gte('pagado_en', desde).lt('pagado_en', hasta),
+      supabase.from('rendiciones_productor').select('resultado')
+        .eq('estado', 'pagado').gte('pagado_en', desde).lt('pagado_en', hasta),
     ]).then(([a, b, c]) => {
       if (!vigente) return
       if (a.error) setMsg({ tipo: 'error', texto: a.error.message })
@@ -815,9 +918,8 @@ function Facturacion() {
   const conPuntos = pedidos.filter((p) => p.pago === 'puntos')
   const totalCuotas = cuotas ? cuotas.reduce((acc, c) => acc + Number(c.monto), 0) : 0
   const lista = pedidos.filter((p) => filtro === 'todos' || p.pago === filtro)
-  const totalMem = membresias.reduce((acc, m) => acc + Number(m.pagado_pesos), 0)
-  const memPuntos = membresias.reduce((acc, m) => acc + Number(m.pagado_puntos), 0)
-  const memPuntosPesos = membresias.reduce((acc, m) => acc + Number(m.pagado_puntos_pesos), 0)
+  const totalMem = membresias.reduce((acc, m) => acc + Math.max(Number(m.resultado), 0), 0)
+  const pagadoProd = membresias.reduce((acc, m) => acc + Math.max(-Number(m.resultado), 0), 0)
   const totalMes = sumaPesos(dinero) + totalCuotas + totalMem
 
   return (
@@ -831,11 +933,11 @@ function Facturacion() {
         <p className="mu" style={{ marginTop: 12 }}>Total facturado del mes</p>
         <p className="pts" style={{ fontSize: 32 }}>{cargando ? '...' : pesos(totalMes)}</p>
         <p className="mu">
-          Tienda {pesos(sumaPesos(dinero))} · Cuotas de socios {pesos(totalCuotas)} ({cuotas ? cuotas.length : 0} pagos) · Membresías de productores {pesos(totalMem)}
+          Tienda {pesos(sumaPesos(dinero))} · Cuotas de socios {pesos(totalCuotas)} ({cuotas ? cuotas.length : 0} pagos) · Rendiciones de productores {pesos(totalMem)}
         </p>
         <p className="mu" style={{ marginTop: 8 }}>Tienda: efectivo {pesos(sumaPesos(efectivo))} ({efectivo.length}) · transferencia {pesos(sumaPesos(transf))} ({transf.length})</p>
         <p className="mu">Pagados con puntos: {conPuntos.length} pedidos ({fmt(conPuntos.reduce((acc, p) => acc + Number(p.total_puntos), 0))} puntos). No suman a la facturación.</p>
-        {memPuntos > 0 && <p className="mu">Membresías pagadas con puntos, aparte: {fmt(memPuntos)} puntos (equivalen a {pesos(memPuntosPesos)}).</p>}
+        {pagadoProd > 0 && <p className="mu">Pagado a productores en rendiciones, aparte: {pesos(pagadoProd)} (no se resta del total).</p>}
         <p className="mu" style={{ marginTop: 8 }}>Cada pedido se cuenta en el mes en que se confirma. No incluye el costo de envío, que se acuerda por WhatsApp.</p>
       </div>
       <Msg m={msg} />
@@ -872,7 +974,95 @@ const aCampo = (iso) => new Date(new Date(iso).getTime() - 3 * 3600 * 1000).toIS
 const deCampo = (v) => new Date(v + ':00-03:00').toISOString()
 
 function EventosAdmin() {
+  const [tab, setTab] = useState('club')
+  return (
+    <>
+      <div className="chips">
+        <button type="button" className={'chip' + (tab === 'club' ? ' on' : '')} onClick={() => setTab('club')}>Eventos del club</button>
+        <button type="button" className={'chip' + (tab === 'cerveceros' ? ' on' : '')} onClick={() => setTab('cerveceros')}>Eventos de Cerveceros</button>
+      </div>
+      {tab === 'club' ? <EventosClub /> : <EventosCerveceros />}
+    </>
+  )
+}
+
+function EventosCerveceros() {
+  const vacio = { titulo: '', fecha: '', lugar: '', descripcion: '' }
+  const [lista, setLista] = useState([])
+  const [nuevo, setNuevo] = useState(vacio)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('eventos_productores').select('*').order('fecha', { ascending: false })
+    setLista((data || []).map((e) => ({ ...e, fecha: aCampo(e.fecha), lugar: e.lugar ?? '', descripcion: e.descripcion ?? '' })))
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  const editar = (id, c, v) => setLista((l) => l.map((e) => (e.id === id ? { ...e, [c]: v } : e)))
+  const datos = (e) => ({
+    titulo: e.titulo.trim(), fecha: deCampo(e.fecha),
+    lugar: e.lugar.trim() || null, descripcion: e.descripcion.trim() || null,
+  })
+
+  async function guardar(e) {
+    setMsg(null)
+    const { error } = await supabase.from('eventos_productores').update(datos(e)).eq('id', e.id)
+    setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado: ' + e.titulo })
+  }
+  async function agregar(ev) {
+    ev.preventDefault()
+    setMsg(null)
+    const { error } = await supabase.from('eventos_productores').insert(datos(nuevo))
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Evento agregado: ' + nuevo.titulo })
+    setNuevo(vacio)
+    cargar()
+  }
+  async function borrar(e) {
+    if (!window.confirm('¿Eliminar "' + e.titulo + '"?')) return
+    setMsg(null)
+    const { error } = await supabase.from('eventos_productores').delete().eq('id', e.id)
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+
+  const campos = (e, set, id) => (
+    <div className="filtros">
+      <div><label htmlFor={id + '-t'}>Título</label><input id={id + '-t'} value={e.titulo} onChange={(x) => set('titulo', x.target.value)} required /></div>
+      <div><label htmlFor={id + '-f'}>Fecha y hora</label><input id={id + '-f'} type="datetime-local" value={e.fecha} onChange={(x) => set('fecha', x.target.value)} required /></div>
+      <div><label htmlFor={id + '-l'}>Lugar</label><input id={id + '-l'} value={e.lugar} onChange={(x) => set('lugar', x.target.value)} /></div>
+      <div style={{ gridColumn: '1 / -1' }}><label htmlFor={id + '-d'}>Descripción (opcional)</label><input id={id + '-d'} value={e.descripcion} onChange={(x) => set('descripcion', x.target.value)} /></div>
+    </div>
+  )
+
+  return (
+    <>
+      <p className="mu">Solo los ven los productores, en su pantalla de Inicio. Desaparecen solos cuando pasa la fecha.</p>
+      <form className="card" onSubmit={agregar}>
+        <h3>Agregar evento de Cerveceros</h3>
+        {campos(nuevo, (c, v) => setNuevo({ ...nuevo, [c]: v }), 'nuevo-ec')}
+        <button className="btn pri" style={{ marginTop: 16 }}>Agregar evento</button>
+      </form>
+      <Msg m={msg} />
+      <h2>Eventos de Cerveceros</h2>
+      {lista.length === 0 && <p className="mu">Todavía no cargaste eventos.</p>}
+      {lista.map((e) => (
+        <div key={e.id} className="card">
+          {campos(e, (c, v) => editar(e.id, c, v), 'ec-' + e.id)}
+          <div className="row" style={{ marginTop: 10 }}>
+            <button type="button" className="btn" onClick={() => borrar(e)}>Eliminar</button>
+            <button type="button" className="btn pri" onClick={() => guardar(e)}>Guardar cambios</button>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function EventosClub() {
   const vacio = { titulo: '', descripcion: '', fecha: '', cupos: '' }
+  const [abierto, setAbierto] = useState(null)
+  const [anotados, setAnotados] = useState({})
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
   const [msg, setMsg] = useState(null)
@@ -885,6 +1075,18 @@ function EventosAdmin() {
     })))
   }, [])
   useEffect(() => { cargar() }, [cargar])
+
+  async function verAnotados(e) {
+    if (abierto === e.id) return setAbierto(null)
+    setMsg(null)
+    const { data, error } = await supabase.rpc('anotados_evento', { p_evento: e.id })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setAnotados((m) => ({ ...m, [e.id]: data || [] }))
+    setAbierto(e.id)
+  }
+  const copiar = (filas) =>
+    navigator.clipboard.writeText(filas.map((a) => a.email).join(', '))
+      .then(() => setMsg({ tipo: 'ok', texto: 'Correos copiados.' }), () => setMsg({ tipo: 'error', texto: 'No se pudo copiar.' }))
 
   const editar = (id, c, v) => setLista((l) => l.map((e) => (e.id === id ? { ...e, [c]: v } : e)))
   const datos = (e) => ({
@@ -936,7 +1138,28 @@ function EventosAdmin() {
       {lista.map((e) => (
         <div key={e.id} className="card">
           {campos(e, (c, v) => editar(e.id, c, v), e.id)}
-          <p className="mu" style={{ marginTop: 8 }}>Anotados: {e.anotados}</p>
+          <div className="row" style={{ marginTop: 8 }}>
+            <span className="mu">Anotados: {e.anotados}</span>
+            <button type="button" className="btn" onClick={() => verAnotados(e)}>{abierto === e.id ? 'Ocultar anotados' : 'Ver anotados'}</button>
+          </div>
+          {abierto === e.id && (
+            <div style={{ marginTop: 8 }}>
+              {(anotados[e.id] || []).length === 0 && <p className="mu">Todavía no se anotó nadie.</p>}
+              {(anotados[e.id] || []).length > 0 && (
+                <>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table>
+                      <thead><tr><th>Nombre</th><th>Apellido</th><th>Correo</th></tr></thead>
+                      <tbody>
+                        {anotados[e.id].map((a, i) => <tr key={i}><td>{a.nombre}</td><td>{a.apellido}</td><td>{a.email}</td></tr>)}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => copiar(anotados[e.id])}>Copiar correos</button>
+                </>
+              )}
+            </div>
+          )}
           <div className="row" style={{ marginTop: 10 }}>
             <button type="button" className="btn" onClick={() => borrar(e)}>Eliminar</button>
             <button type="button" className="btn pri" onClick={() => guardar(e)}>Guardar cambios</button>
@@ -1033,11 +1256,11 @@ const GRUPOS_PUNTOS = [
   },
   {
     titulo: 'Productores',
-    nota: 'El valor del punto se guarda en cada pedido pagado con puntos: si lo cambiás, no afecta a los puntos ya acumulados. La membresía se calcula cada día 1 sobre el ingreso del mes anterior (pesos más puntos).',
+    nota: 'El valor del punto se guarda en cada pedido pagado con puntos: si lo cambiás, no afecta a los puntos ya acumulados. También define el precio en puntos de los productos (90% del precio en pesos). Cada día 1 se genera la rendición del mes anterior: porcentaje sobre el ingreso (pesos más puntos) menos el valor de los puntos obtenidos.',
     campos: [
       ['valor_punto', 'Valor de cada punto ($)', 'Pesos que vale un punto para el productor', 1000000, 0.01],
-      ['membresia_porcentaje', 'Membresía del productor (%)', 'Porcentaje del ingreso del mes anterior', 100, 0.1],
-      ['membresia_dias_gracia', 'Días de gracia de la membresía', 'Días que puede seguir vendiendo después de que vence', 365, 1],
+      ['membresia_porcentaje', 'Porcentaje pactado con productores (%)', 'Porcentaje del ingreso del mes anterior', 100, 0.1],
+      ['membresia_dias_gracia', 'Días de gracia de la rendición', 'Días que puede seguir vendiendo si debe pagar', 365, 1],
     ],
   },
 ]
@@ -1102,28 +1325,26 @@ function ProductoresAdmin() {
   const [per, setPer] = useState(actual)
   const [lista, setLista] = useState(null)
   const [fact, setFact] = useState({})
-  const [canjes, setCanjes] = useState([])
-  const [mems, setMems] = useState([])
+  const [rends, setRends] = useState([])
   const [ventas, setVentas] = useState({})
   const [abierto, setAbierto] = useState(null)
+  const [tiendaDe, setTiendaDe] = useState(null)
   const [msg, setMsg] = useState(null)
   const [ahora, setAhora] = useState(Date.now())
 
   const cargar = useCallback(async () => {
     const desde = new Date(Date.UTC(per.a, per.m, 1, 3)).toISOString()
     const hasta = new Date(Date.UTC(per.a, per.m + 1, 1, 3)).toISOString()
-    const [r, f, c, m] = await Promise.all([
+    const [r, f, d] = await Promise.all([
       supabase.rpc('resumen_productores'),
       supabase.rpc('facturacion_productores', { p_desde: desde, p_hasta: hasta }),
-      supabase.from('canjes_productor').select('*, productores(cerveceria)').eq('estado', 'pendiente').order('creado_en'),
-      supabase.from('membresias_productor').select('*, productores(cerveceria)').in('estado', ['pendiente', 'informada']).order('periodo'),
+      supabase.from('rendiciones_productor').select('*, productores(cerveceria)').eq('estado', 'pendiente').order('periodo'),
     ])
-    const err = r.error || f.error || c.error || m.error
+    const err = r.error || f.error || d.error
     if (err) setMsg({ tipo: 'error', texto: err.message })
     setLista(r.data || [])
     setFact(Object.fromEntries((f.data || []).map((x) => [x.id, x])))
-    setCanjes(c.data || [])
-    setMems(m.data || [])
+    setRends(d.data || [])
   }, [per])
 
   // Se refresca solo cada 30 segundos para ver los pedidos que esperan respuesta.
@@ -1138,6 +1359,7 @@ function ProductoresAdmin() {
     return { a: n.getUTCFullYear(), m: n.getUTCMonth() }
   })
   const esActual = per.a === actual.a && per.m === actual.m
+  const mesDe = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 
   async function verVentas(id) {
     if (abierto === id) return setAbierto(null)
@@ -1148,28 +1370,27 @@ function ProductoresAdmin() {
     setAbierto(id)
   }
 
-  async function resolverCanje(c, aprobar) {
-    if (aprobar && !window.confirm('¿Aprobar el canje de ' + fmt(c.puntos) + ' puntos? Se descuentan ahora y después le pagás lo que corresponda.')) return
+  async function pagarRendicion(r) {
     setMsg(null)
-    const { data, error } = await supabase.rpc('resolver_canje', { p_id: c.id, p_aprobar: aprobar })
+    const { error } = await supabase.rpc('resolver_rendicion', { p_id: r.id })
     if (error) return setMsg({ tipo: 'error', texto: error.message })
-    setMsg({ tipo: 'ok', texto: aprobar ? 'Canje aprobado: pagale ' + pesos(data) + ' a ' + (c.productores && c.productores.cerveceria) + '.' : 'Canje rechazado.' })
+    setMsg({ tipo: 'ok', texto: 'Rendición marcada como pagada.' + (Number(r.resultado) > 0 ? ' Si tenía los productos ocultos, vuelven a mostrarse.' : '') })
     cargar()
   }
 
-  async function resolverMembresia(m, confirmar) {
+  async function reabrir(pr) {
     setMsg(null)
-    const { error } = await supabase.rpc('resolver_pago_membresia', { p_id: m.id, p_confirmar: confirmar })
+    const { error } = await supabase.rpc('cambiar_tienda', { p_productor: pr.id, p_abrir: true })
     if (error) return setMsg({ tipo: 'error', texto: error.message })
-    setMsg({ tipo: 'ok', texto: confirmar ? 'Pago validado: sus productos se muestran de nuevo si estaban ocultos.' : 'Pago rechazado: vuelve a quedar pendiente.' })
+    setMsg({ tipo: 'ok', texto: 'Tienda de ' + (pr.cerveceria || 'el productor') + ' abierta.' })
     cargar()
   }
 
   async function generar() {
     setMsg(null)
-    const { data, error } = await supabase.rpc('generar_membresias')
+    const { data, error } = await supabase.rpc('generar_rendiciones')
     if (error) return setMsg({ tipo: 'error', texto: error.message })
-    setMsg({ tipo: 'ok', texto: data > 0 ? 'Se generaron ' + data + ' membresías del mes anterior.' : 'No había membresías nuevas para generar: ya estaban todas.' })
+    setMsg({ tipo: 'ok', texto: data > 0 ? 'Se generaron ' + data + ' rendiciones del mes anterior.' : 'No había rendiciones nuevas para generar: ya estaban todas.' })
     cargar()
   }
 
@@ -1189,46 +1410,31 @@ function ProductoresAdmin() {
   }
 
   if (lista === null) return <><Msg m={msg} /><p className="mu">Cargando...</p></>
-  const porResolver = canjes.length + mems.filter((m) => m.estado === 'informada').length
 
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Productores</h2>
       <Msg m={msg} />
 
-      {(canjes.length > 0 || mems.length > 0) && (
-        <div className="card" style={porResolver > 0 ? { borderColor: 'var(--am)' } : undefined}>
-          <h3>Para resolver</h3>
-          {canjes.map((c) => (
-            <div key={'c' + c.id} className="card">
-              <b>Canje de puntos · {(c.productores && c.productores.cerveceria) || 'Productor'}</b>
-              <p>{fmt(c.puntos)} puntos (≈ {pesos(c.monto_estimado)})</p>
-              <p className="mu">Pedido el {fechaHora(c.creado_en)}. Al aprobar se descuentan los puntos y le pagás lo que corresponda.</p>
-              <div className="row" style={{ marginTop: 8 }}>
-                <button className="btn" onClick={() => resolverCanje(c, false)}>Rechazar</button>
-                <button className="btn pri" onClick={() => resolverCanje(c, true)}>Aprobar canje</button>
+      {rends.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--am)' }}>
+          <h3>Rendiciones pendientes</h3>
+          {rends.map((r) => {
+            const res = Number(r.resultado)
+            return (
+              <div key={r.id} className="card">
+                <div className="row">
+                  <b>{(r.productores && r.productores.cerveceria) || 'Productor'} · <span style={{ textTransform: 'capitalize' }}>{mesDe(r.periodo)}</span></b>
+                  <span className={'pill ' + (res > 0 ? 'bad' : 'warn')}>Ticket N.º {r.id}</span>
+                </div>
+                <p>Cobrado en pesos: {pesos(r.ingreso_pesos)} · Puntos: {fmt(r.puntos)} (valen {pesos(r.puntos_pesos)})</p>
+                <p>{r.porcentaje}% sobre {pesos(Number(r.ingreso_pesos) + Number(r.puntos_pesos))} = {pesos(r.comision)}, menos {pesos(r.puntos_pesos)} en puntos</p>
+                <p><b>{res > 0 ? 'Debe pagar el productor: ' + pesos(res) : res < 0 ? 'Debe pagar el club: ' + pesos(-res) : 'Sin saldo'}</b></p>
+                {res > 0 && r.vence_gracia && <p className="mu">Puede vender hasta el {new Date(r.vence_gracia + 'T00:00:00').toLocaleDateString('es-AR')}; después se le ocultan los productos.</p>}
+                <button type="button" className="btn pri" style={{ marginTop: 8 }} onClick={() => pagarRendicion(r)}>Marcar como pagada</button>
               </div>
-            </div>
-          ))}
-          {mems.map((m) => (
-            <div key={'m' + m.id} className="card">
-              <div className="row">
-                <b>Membresía · {(m.productores && m.productores.cerveceria) || 'Productor'}</b>
-                <span className={'pill ' + (m.estado === 'informada' ? 'warn' : 'bad')}>{m.estado === 'informada' ? 'Pago informado' : 'Sin pagar'}</span>
-              </div>
-              <p style={{ textTransform: 'capitalize' }}>{new Date(m.periodo + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}: <b>{pesos(m.monto)}</b></p>
-              <p className="mu">
-                {m.estado === 'informada' ? 'Informó ' + fmt(m.informado_puntos) + ' puntos; el resto lo paga en pesos. ' : 'Todavía no informó el pago. '}
-                Gracia hasta el {new Date(m.vence_gracia + 'T00:00:00').toLocaleDateString('es-AR')}.
-              </p>
-              <div className="row" style={{ marginTop: 8 }}>
-                {m.estado === 'informada' && <button className="btn" onClick={() => resolverMembresia(m, false)}>Rechazar</button>}
-                <button className="btn pri" onClick={() => resolverMembresia(m, true)}>
-                  {m.estado === 'informada' ? 'Validar pago' : 'Registrar pago en pesos'}
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -1238,7 +1444,7 @@ function ProductoresAdmin() {
           <h3 style={{ textTransform: 'capitalize' }}>{mesLargo(per.a, per.m)}</h3>
           <button type="button" className="btn" aria-label="Mes siguiente" disabled={esActual} onClick={() => mover(1)}>▶</button>
         </div>
-        <p className="mu" style={{ marginTop: 8 }}>La facturación de cada productor se cuenta en el mes en que acepta el pedido.</p>
+        <p className="mu" style={{ marginTop: 8 }}>La facturación de cada productor se cuenta en el mes en que marca el pedido como entregado.</p>
       </div>
 
       {lista.length === 0 && (
@@ -1254,24 +1460,34 @@ function ProductoresAdmin() {
           <div key={pr.id} className="card">
             <div className="row"><b>{pr.cerveceria || 'Sin nombre de cervecería'}</b><span className={'pill ' + clase}>{texto}</span></div>
             <p className="mu">{pr.nombre || 'Sin nombre'} · {pr.whatsapp ? 'WhatsApp ' + pr.whatsapp : 'Sin WhatsApp cargado'}</p>
+            <p>
+              Tienda: <span className={'pill ' + (pr.tienda_abierta ? 'ok' : 'bad')}>{pr.tienda_abierta ? 'Abierta' : 'Cerrada'}</span>
+              {pr.tienda_bloqueada && <span className="msg error" style={{ marginLeft: 8 }}>Se cerró sola por 3 pedidos sin respuesta</span>}
+            </p>
+            {pr.sin_cerrar > 0 && <p className="msg error">{pr.sin_cerrar} {pr.sin_cerrar === 1 ? 'pedido aceptado' : 'pedidos aceptados'} sin cerrar hace más de 7 días.</p>}
             {f && (
               <div style={{ marginTop: 8 }}>
-                <p className="mu" style={{ textTransform: 'capitalize' }}>Facturación de {mesLargo(per.a, per.m)} ({f.cant_pedidos} pedidos)</p>
+                <p className="mu" style={{ textTransform: 'capitalize' }}>Facturación de {mesLargo(per.a, per.m)} ({f.cant_pedidos} pedidos entregados)</p>
                 <p>Cobrado en pesos: <b>{pesos(f.pesos_cobrados)}</b></p>
                 <p>Puntos: <b className="pts">{fmt(f.puntos)}</b> (equivalen a {pesos(f.puntos_en_pesos)})</p>
                 <p>Ingreso total del mes: <b>{pesos(f.ingreso_total)}</b></p>
               </div>
             )}
-            <p className="mu" style={{ marginTop: 8 }}>Desde siempre: aceptados {pr.aceptados} · rechazados {pr.rechazados} · sin respuesta {pr.vencidos}</p>
+            <p className="mu" style={{ marginTop: 8 }}>
+              Desde siempre: entregados {pr.aceptados} · en proceso {pr.en_proceso} · no entregados {pr.no_entregados} · rechazados {pr.rechazados} · sin respuesta {pr.vencidos}
+            </p>
             <div className="row" style={{ marginTop: 10 }}>
               <button type="button" className="btn" onClick={() => verVentas(pr.id)}>{abierto === pr.id ? 'Ocultar ventas' : 'Ver ventas'}</button>
+              <button type="button" className="btn" onClick={() => setTiendaDe(tiendaDe === pr.id ? null : pr.id)}>{tiendaDe === pr.id ? 'Ocultar tienda' : 'Tienda'}</button>
+              {pr.tienda_bloqueada && <button type="button" className="btn pri" onClick={() => reabrir(pr)}>Reabrir tienda</button>}
               {pr.pendientes > 0 && pr.whatsapp && (
                 <a className="btn pri" href={aviso(pr)} target="_blank" rel="noreferrer">Avisar por WhatsApp</a>
               )}
             </div>
+            {tiendaDe === pr.id && <div style={{ marginTop: 12 }}><TiendaControl productorId={pr.id} titulo={'Tienda de ' + (pr.cerveceria || 'productor')} propia={false} /></div>}
             {abierto === pr.id && (
               <div style={{ marginTop: 12 }}>
-                {filas.length === 0 && <p className="mu">Todavía no tiene ventas aceptadas.</p>}
+                {filas.length === 0 && <p className="mu">Todavía no tiene ventas entregadas.</p>}
                 {filas.length > 0 && (
                   <>
                     <h3>Total por producto</h3>
@@ -1279,7 +1495,7 @@ function ProductoresAdmin() {
                     <h3 style={{ marginTop: 12 }}>Detalle (últimas {filas.length})</h3>
                     <div style={{ overflowX: 'auto' }}>
                       <table>
-                        <thead><tr><th>Fecha</th><th>Pedido</th><th>Producto</th><th>Cant.</th></tr></thead>
+                        <thead><tr><th>Entrega</th><th>Pedido</th><th>Producto</th><th>Cant.</th></tr></thead>
                         <tbody>
                           {filas.map((fl, i) => (
                             <tr key={i}>
@@ -1299,9 +1515,9 @@ function ProductoresAdmin() {
       })}
 
       <div className="card">
-        <h3>Membresías del mes</h3>
-        <p className="mu">Se generan solas el día 1 de cada mes con el % del ingreso del mes anterior. Si hace falta, podés generarlas a mano: no duplica las que ya existen.</p>
-        <button type="button" className="btn" style={{ marginTop: 8 }} onClick={generar}>Generar membresías del mes anterior</button>
+        <h3>Rendiciones del mes</h3>
+        <p className="mu">Se generan solas el día 1 de cada mes: porcentaje pactado sobre el ingreso del mes anterior, menos el valor de los puntos. Si hace falta, podés generarlas a mano: no duplica las que ya existen.</p>
+        <button type="button" className="btn" style={{ marginTop: 8 }} onClick={generar}>Generar rendiciones del mes anterior</button>
       </div>
     </>
   )

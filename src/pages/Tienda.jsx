@@ -3,12 +3,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
 import MasVendidos from '../MasVendidos'
+import { cuando } from '../TiendaControl'
 
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
 const PAGO_TXT = Object.fromEntries(PAGOS)
 const ENTREGAS = [['retiro', 'Retiro en el local'], ['envio', 'Envío a domicilio']]
 const pesos = (n) => '$ ' + fmt(n)
-const ESTADOS = { pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Confirmado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
+const ESTADOS = { pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Entregado'], no_entregado: ['bad', 'No entregado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
 // Cervecería de cada producto: la del productor, o el nombre del club (se edita en Marca).
 const cerveceriaDe = (p, club) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : club || 'Club Cervecero')
 
@@ -45,19 +46,22 @@ export default function Tienda({ perfil }) {
   const [abierta, setAbierta] = useState(false)
   const [version, setVersion] = useState(0)
   const [masAbierto, setMasAbierto] = useState(false)
+  const [tiendas, setTiendas] = useState({})
 
   const cargar = useCallback(async () => {
-    const [s, p, c, sd] = await Promise.all([
+    const [s, p, c, sd, et] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
       supabase.from('tienda_productos').select('*, productores(cerveceria)').eq('activo', true).gt('stock', 0).order('nombre'),
       supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
+      supabase.rpc('estado_tiendas'),
     ])
     const vis = s.data || []
     setSecciones(vis)
     setProductos((p.data || []).filter((x) => vis.some((v) => v.id === x.seccion)))
     setConfig(c.data || {})
     setSaldo(sd.data ?? 0)
+    setTiendas(Object.fromEntries((et.data || []).map((t) => [t.productor_id || '', t])))
     setSeccion((act) => (vis.some((v) => v.id === act) ? act : vis[0] ? vis[0].id : null))
   }, [perfil.id])
   useEffect(() => { cargar() }, [cargar])
@@ -129,10 +133,18 @@ export default function Tienda({ perfil }) {
   }
 
   const visibles = productos.filter((p) => p.seccion === seccion)
+  const tiendaDe = (p) => tiendas[p.productor_id || '']
+  const cerrada = (p) => !!tiendaDe(p) && tiendaDe(p).abierta === false
+  const avisoCierre = (p) => {
+    const t = tiendaDe(p)
+    return 'Tienda cerrada por ahora' + (t && t.proxima_apertura ? ': abre el ' + cuando(t.proxima_apertura) : '') + '.'
+  }
+  const clubCerrado = tiendas[''] && tiendas[''].abierta === false
 
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
+      {clubCerrado && <p className="msg error">La tienda del club está cerrada por ahora{tiendas[''].proxima_apertura ? ': abre el ' + cuando(tiendas[''].proxima_apertura) : ''}. Podés mirar los productos, pero todavía no comprar.</p>}
       <Acordeon titulo="Más vendidos" icono="crown" abierto={masAbierto} onToggle={() => setMasAbierto((a) => !a)}>
         <MasVendidos />
       </Acordeon>
@@ -153,12 +165,13 @@ export default function Tienda({ perfil }) {
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
             <p>{pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
             {p.stock <= 5 && <p className="mu">Quedan {p.stock}</p>}
+            {cerrada(p) && p.productor_id && <p className="msg error">{avisoCierre(p)}</p>}
             </div>
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn" aria-label={'Quitar uno de ' + p.nombre} disabled={!carrito[p.id]} onClick={() => cambiar(p, -1)}>−</button>
             <b aria-live="polite">{carrito[p.id] || 0}</b>
-            <button className="btn" aria-label={'Agregar uno de ' + p.nombre} disabled={(carrito[p.id] || 0) >= p.stock} onClick={() => cambiar(p, 1)}>+</button>
+            <button className="btn" aria-label={'Agregar uno de ' + p.nombre} disabled={cerrada(p) || (carrito[p.id] || 0) >= p.stock} onClick={() => cambiar(p, 1)}>+</button>
           </div>
         </div>
       ))}
@@ -227,7 +240,7 @@ function MisPedidos({ perfil, version, club }) {
 
   if (filas && filas.length === 0) return <p className="mu">Todavía no hiciste pedidos.</p>
   return (filas || []).map((p) => {
-    const [clase, texto] = ESTADOS[p.estado]
+    const [clase, texto] = p.estado === 'aceptado' ? ['warn', p.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'] : ESTADOS[p.estado]
     return (
       <div key={p.id} className="card">
         <div className="row">

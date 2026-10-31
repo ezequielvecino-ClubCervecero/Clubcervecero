@@ -1,19 +1,21 @@
-// Pantalla del productor: pedidos que le llegan, sus productos y los datos de su cervecería.
+// Pantalla del productor: inicio, pedidos, productos, rendición mensual y datos de su cervecería.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Msg, Navegacion, fmt, fechaHora } from '../ui'
 import { subirImagenProducto } from '../imagenes'
+import TiendaControl from '../TiendaControl'
 import { CamposProducto } from './Panel'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + fmt(n)
 const ESTADOS = {
-  pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Aceptado'], rechazado: ['bad', 'Rechazado'],
-  vencido: ['bad', 'Sin respuesta'], cancelado: ['bad', 'Cancelado'],
+  pendiente: ['warn', 'Pendiente'], aceptado: ['warn', 'En proceso'], confirmado: ['ok', 'Entregado'],
+  no_entregado: ['bad', 'No entregado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta'], cancelado: ['bad', 'Cancelado'],
 }
 const LIMITE_MIN = 30
-
+const ZONA = 'America/Argentina/Buenos_Aires'
 const mesTxt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+const diasDesde = (ts) => Math.floor((Date.now() - new Date(ts).getTime()) / 86400000)
 
 export default function Productor({ perfil }) {
   const [vista, setVista] = useState('inicio')
@@ -48,10 +50,10 @@ export default function Productor({ perfil }) {
 
   return (
     <>
-      {vista === 'inicio' && <Inicio inicio={inicio} error={error} irA={setVista} />}
+      {vista === 'inicio' && <Inicio perfil={perfil} inicio={inicio} error={error} irA={setVista} />}
       {vista === 'pedidos' && <Pedidos pedidos={pedidos} resumen={resumen} datos={datos} error={error} recargar={cargar} />}
       {vista === 'productos' && <Productos perfil={perfil} datos={datos} oculto={!!(inicio && inicio.oculto)} />}
-      {vista === 'cuenta' && <Cuenta perfil={perfil} inicio={inicio} recargar={cargar} />}
+      {vista === 'cuenta' && <Cuenta perfil={perfil} inicio={inicio} />}
       {vista === 'datos' && <Datos perfil={perfil} datos={datos} onGuardado={cargar} />}
       <Navegacion
         items={[
@@ -63,23 +65,32 @@ export default function Productor({ perfil }) {
   )
 }
 
-// Lo primero que ve el productor: avisos y resumen del mes.
-function Inicio({ inicio, error, irA }) {
+// Lo primero que ve el productor: avisos, tienda, resumen del mes y eventos.
+function Inicio({ perfil, inicio, error, irA }) {
+  const [eventos, setEventos] = useState([])
+  useEffect(() => {
+    supabase.from('eventos_productores').select('*').gte('fecha', new Date().toISOString()).order('fecha')
+      .then(({ data }) => setEventos(data || []))
+  }, [])
+
   if (!inicio) return <><h2 style={{ marginTop: 6 }}>Inicio</h2>{error && <p className="msg error">{error}</p>}<p className="mu">Cargando...</p></>
-  const m = inicio.membresia
+
+  const r = inicio.rendicion
   let aviso = null
-  if (m) {
-    const mes = mesTxt(m.periodo)
-    if (inicio.oculto) {
-      aviso = ['error', 'Tus productos están ocultos para los socios. Se vuelven a mostrar cuando el administrador valide el pago de la membresía de ' + mes + ' (' + pesos(m.monto) + ').']
-    } else if (m.estado === 'informada') {
-      aviso = ['ok', 'Informaste el pago de la membresía de ' + mes + '. Falta que el administrador lo valide.']
+  if (r) {
+    const mes = mesTxt(r.periodo)
+    if (Number(r.resultado) < 0) {
+      aviso = ['ok', 'La rendición de ' + mes + ' da a tu favor: el club te debe ' + pesos(-r.resultado) + '.']
+    } else if (inicio.oculto) {
+      aviso = ['error', 'Tus productos están ocultos para los socios. Se vuelven a mostrar cuando el administrador registre el pago de la rendición de ' + mes + ' (' + pesos(r.resultado) + ').']
     } else {
-      const d = m.dias_restantes
-      aviso = [d <= 5 ? 'error' : 'ok', 'Tenés que pagar la membresía de ' + mes + ': ' + pesos(m.monto) + '. ' +
+      const d = r.dias_restantes
+      aviso = [d <= 5 ? 'error' : 'ok', 'Tenés que pagar la rendición de ' + mes + ': ' + pesos(r.resultado) + '. ' +
         (d > 0 ? 'Te quedan ' + d + (d === 1 ? ' día' : ' días') + ' antes de que se oculten tus productos.' : 'Hoy es el último día antes de que se oculten tus productos.')]
     }
   }
+  const est = Number(inicio.resultado_estimado)
+
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Inicio</h2>
@@ -87,7 +98,7 @@ function Inicio({ inicio, error, irA }) {
       {aviso && (
         <div className="card" style={{ borderColor: 'var(--am)' }}>
           <p className={'msg ' + aviso[0]}>{aviso[1]}</p>
-          <button className="btn pri" style={{ marginTop: 8 }} onClick={() => irA('cuenta')}>Ir a pagar</button>
+          <button className="btn pri" style={{ marginTop: 8 }} onClick={() => irA('cuenta')}>Ver mi cuenta</button>
         </div>
       )}
       {inicio.pendientes > 0 && (
@@ -96,26 +107,48 @@ function Inicio({ inicio, error, irA }) {
           <button className="btn pri" style={{ marginTop: 8 }} onClick={() => irA('pedidos')}>Ver pedidos</button>
         </div>
       )}
+      {inicio.sin_cerrar > 0 && (
+        <div className="card" style={{ borderColor: 'var(--am)' }}>
+          <p className="msg error">Tenés {inicio.sin_cerrar} {inicio.sin_cerrar === 1 ? 'pedido aceptado' : 'pedidos aceptados'} hace más de 7 días sin cerrar. Marcá si se entregaron o no.</p>
+          <button className="btn" style={{ marginTop: 8 }} onClick={() => irA('pedidos')}>Ir a pedidos</button>
+        </div>
+      )}
+
+      <TiendaControl productorId={perfil.id} titulo="Mi tienda" propia />
+
       <div className="card">
         <h3>Este mes</h3>
         <p>Efectivo y transferencias recaudados: <b>{pesos(inicio.efectivo_mes)}</b></p>
-        <p>Puntos recibidos: <b className="pts">{fmt(inicio.puntos_mes)}</b> (equivalen a {pesos(inicio.puntos_mes_pesos)})</p>
+        <p>Puntos obtenidos: <b className="pts">{fmt(inicio.puntos_mes)}</b> (valen {pesos(inicio.puntos_mes_pesos)})</p>
         <p>Ingreso del mes: <b>{pesos(inicio.ingreso_mes)}</b></p>
+        <p className="mu">Cuentan los pedidos que marcás como entregados.</p>
+        {Number(inicio.valor_punto) === 0 && <p className="mu">El administrador todavía no cargó el valor del punto.</p>}
       </div>
       <div className="card">
-        <h3>Membresía de este mes</h3>
-        <p className="pts" style={{ fontSize: 28 }}>{pesos(inicio.cuota_estimada)}</p>
+        <h3>Rendición estimada del mes</h3>
+        <p className="pts" style={{ fontSize: 28 }}>{pesos(Math.abs(est))}</p>
+        <p>{est > 0 ? 'A pagar por vos' : est < 0 ? 'A pagar por el club' : 'Sin saldo'}</p>
         <p className="mu">
-          Estimada: es el {inicio.porcentaje}% de tu ingreso del mes (pesos más puntos). Sube con cada venta y queda firme cuando cierra el mes.
+          Es el {inicio.porcentaje}% de tu ingreso ({pesos(inicio.comision_estimada)}) menos el valor de tus puntos ({pesos(inicio.puntos_mes_pesos)}).
+          Sube con cada entrega y queda firme cuando cierra el mes.
         </p>
       </div>
-      <div className="card">
-        <h3>Tus puntos</h3>
-        <p>Disponibles: <b className="pts">{fmt(inicio.puntos_disponibles)}</b> (equivalen a {pesos(inicio.puntos_disponibles_pesos)})</p>
-        {Number(inicio.valor_punto) === 0 && <p className="mu">El administrador todavía no cargó el valor del punto.</p>}
-        {inicio.canjes_pendientes > 0 && <p className="mu">Tenés {inicio.canjes_pendientes} canje(s) esperando aprobación.</p>}
-        <button className="btn" style={{ marginTop: 8 }} onClick={() => irA('cuenta')}>Canjear o pagar con puntos</button>
-      </div>
+
+      {eventos.length > 0 && (
+        <>
+          <h2>Eventos de Cerveceros</h2>
+          {eventos.map((e) => (
+            <div key={e.id} className="card">
+              <b>{e.titulo}</b>
+              <p className="mu" style={{ textTransform: 'capitalize' }}>
+                {new Date(e.fecha).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: ZONA })} h
+                {e.lugar ? ' · ' + e.lugar : ''}
+              </p>
+              {e.descripcion && <p>{e.descripcion}</p>}
+            </div>
+          ))}
+        </>
+      )}
     </>
   )
 }
@@ -128,23 +161,34 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
     return () => clearInterval(t)
   }, [])
 
+  const TEXTOS = {
+    aceptado: 'Pedido aceptado. Cuando lo entregues, marcalo como entregado.',
+    confirmado: 'Pedido entregado: ya cuenta en tu facturación.',
+    no_entregado: 'Marcado como no entregado: se devolvieron el stock y los puntos.',
+    rechazado: 'Pedido rechazado: stock y puntos devueltos.',
+  }
+
   async function resolver(p, accion) {
     if (accion === 'rechazar' && !window.confirm('¿Rechazar el pedido N.º ' + p.numero + '? Se devuelven el stock y, si pagó con puntos, los puntos.')) return
+    if (accion === 'no_entregado' && !window.confirm('¿Marcar el pedido N.º ' + p.numero + ' como no entregado? No se cobra ni cuenta en la facturación.')) return
     setMsg(null)
     const { data, error: err } = await supabase.rpc('resolver_pedido_productor', { p_id: p.id, p_accion: accion })
     if (err) return setMsg({ tipo: 'error', texto: err.message })
     if (data === 'vencido') {
       setMsg({ tipo: 'error', texto: 'Ese pedido ya venció (pasaron ' + LIMITE_MIN + ' minutos): se canceló y se devolvieron stock y puntos.' })
     } else {
-      setMsg({ tipo: 'ok', texto: data === 'confirmado' ? 'Pedido aceptado.' : 'Pedido rechazado: stock y puntos devueltos.' })
+      setMsg({ tipo: 'ok', texto: TEXTOS[data] || 'Listo.' })
     }
     recargar()
   }
 
   if (pedidos === null) return <p className="mu">Cargando...</p>
   const pendientes = pedidos.filter((p) => p.estado === 'pendiente')
-  const anteriores = pedidos.filter((p) => p.estado !== 'pendiente')
+  const enProceso = pedidos.filter((p) => p.estado === 'aceptado')
+  const anteriores = pedidos.filter((p) => p.estado !== 'pendiente' && p.estado !== 'aceptado')
   const datosFaltan = datos !== undefined && (!datos || !datos.cerveceria.trim() || !datos.whatsapp)
+  const items = (p) => p.items.map((i, k) => <p key={k}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)
+  const total = (p) => (p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos))
 
   return (
     <>
@@ -157,8 +201,9 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
       {resumen && (
         <div className="card">
           <h3>Tu resumen</h3>
-          <p>Aceptados: <b>{resumen.aceptados}</b> · Rechazados: <b>{resumen.rechazados}</b> · Sin respuesta: <b>{resumen.vencidos}</b></p>
-          <p>Puntos canjeados con tus productos: <b className="pts">{fmt(resumen.puntos_canjeados)}</b></p>
+          <p>Entregados: <b>{resumen.aceptados}</b> · En proceso: <b>{resumen.en_proceso}</b> · No entregados: <b>{resumen.no_entregados}</b></p>
+          <p>Rechazados: <b>{resumen.rechazados}</b> · Sin respuesta: <b>{resumen.vencidos}</b></p>
+          <p>Puntos recibidos con tus entregas: <b className="pts">{fmt(resumen.puntos_canjeados)}</b></p>
         </div>
       )}
 
@@ -172,9 +217,9 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
             <p className={resta <= 5 ? 'msg error' : 'mu'}>
               {resta > 0 ? 'Te quedan ' + resta + ' min para responder.' : 'Se venció el plazo: se cancela en un momento.'}
             </p>
-            <p>Socio N.º {String(p.socio_numero).padStart(4, '0')} · {p.socio_nombre || 'Sin nombre'}</p>
-            {p.items.map((i, k) => <p key={k}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
-            <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (ya descontados)' : pesos(p.total_pesos)}</p>
+            <p>Socio N.º {String(p.socio_numero).padStart(4, '0')} · {(p.socio_nombre || '').trim() || 'Sin nombre'}</p>
+            {items(p)}
+            <p className="pts" style={{ marginTop: 6 }}>{total(p)}</p>
             <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro'}</p>
             <div className="row" style={{ marginTop: 10 }}>
               <button className="btn" onClick={() => resolver(p, 'rechazar')}>Rechazar</button>
@@ -185,15 +230,35 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
       })}
       <Msg m={msg} />
 
+      <h2>En proceso</h2>
+      {enProceso.length === 0 && <p className="mu">No tenés pedidos en proceso.</p>}
+      {enProceso.map((p) => {
+        const d = diasDesde(p.aceptado_en)
+        return (
+          <div key={p.id} className="card">
+            <div className="row"><b>Pedido N.º {p.numero}</b><span className="pill warn">{p.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}</span></div>
+            <p className={d >= 7 ? 'msg error' : 'mu'}>Aceptado hace {d === 0 ? 'menos de un día' : d + (d === 1 ? ' día' : ' días')}{d >= 7 ? ': cerralo cuanto antes.' : '.'}</p>
+            <p>Socio N.º {String(p.socio_numero).padStart(4, '0')} · {(p.socio_nombre || '').trim() || 'Sin nombre'}</p>
+            {items(p)}
+            <p className="pts" style={{ marginTop: 6 }}>{total(p)}</p>
+            <p className="mu">{p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro'}. Al marcar entregado se cobra, se descuentan los puntos del socio y cuenta en tu facturación.</p>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={() => resolver(p, 'no_entregado')}>No entregado</button>
+              <button className="btn pri" onClick={() => resolver(p, 'entregar')}>Entregado</button>
+            </div>
+          </div>
+        )
+      })}
+
       <h2>Anteriores</h2>
-      {anteriores.length === 0 && <p className="mu">Todavía no resolviste pedidos.</p>}
+      {anteriores.length === 0 && <p className="mu">Todavía no cerraste pedidos.</p>}
       {anteriores.map((p) => {
         const [clase, texto] = ESTADOS[p.estado] || ['bad', p.estado]
         return (
           <div key={p.id} className="card">
             <div className="row"><b>Pedido N.º {p.numero}</b><span className={'pill ' + clase}>{texto}</span></div>
             <p className="mu">{fechaHora(p.creado_en)} · Socio N.º {String(p.socio_numero).padStart(4, '0')}</p>
-            {p.items.map((i, k) => <p key={k}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+            {items(p)}
           </div>
         )
       })}
@@ -206,13 +271,12 @@ const datosProducto = (r) => ({
   formato: r.formato && r.formato.trim() ? r.formato.trim() : null,
   descripcion: r.descripcion && r.descripcion.trim() ? r.descripcion.trim() : null,
   precio_pesos: Number(r.precio_pesos),
-  precio_puntos: r.precio_puntos === '' || r.precio_puntos == null ? null : Number(r.precio_puntos),
   stock: Math.max(0, Math.floor(Number(r.stock || 0))),
   imagen_url: r.imagen_url || null,
 })
 
 function Productos({ perfil, datos, oculto }) {
-  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', precio_puntos: '', stock: '', imagen_url: null }
+  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
@@ -245,6 +309,7 @@ function Productos({ perfil, datos, oculto }) {
     setMsg(null)
     const { error } = await supabase.from('tienda_productos').update({ ...datosProducto(r), activo: r.activo }).eq('id', r.id)
     setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado: ' + r.nombre })
+    if (!error) cargar()
   }
 
   async function agregar(e) {
@@ -263,7 +328,8 @@ function Productos({ perfil, datos, oculto }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Mis productos</h2>
-      {oculto && <p className="msg error">Tus productos están ocultos para los socios por la membresía vencida. Mirá Inicio.</p>}
+      {oculto && <p className="msg error">Tus productos están ocultos para los socios por la rendición vencida. Mirá Inicio.</p>}
+      <p className="mu">El precio en puntos se calcula solo: es el 90% del precio en pesos, pasado a puntos con el valor del punto.</p>
       {sinNombre
         ? <p className="msg error">Primero cargá el nombre de tu cervecería en Datos: es el que ven los socios en cada producto.</p>
         : (
@@ -292,97 +358,40 @@ function Productos({ perfil, datos, oculto }) {
   )
 }
 
-const ESTADO_MEM = { pendiente: ['warn', 'Pendiente'], informada: ['warn', 'Esperando validación'], pagada: ['ok', 'Pagada'] }
-const ESTADO_CANJE = { pendiente: ['warn', 'Pendiente'], aprobado: ['ok', 'Aprobado'], rechazado: ['bad', 'Rechazado'] }
-
-function Cuenta({ perfil, inicio, recargar }) {
-  const [canjes, setCanjes] = useState([])
-  const [mems, setMems] = useState([])
-  const [puntos, setPuntos] = useState('')
-  const [usar, setUsar] = useState({})
-  const [msg, setMsg] = useState(null)
-
-  const cargar = useCallback(async () => {
-    const [c, m] = await Promise.all([
-      supabase.from('canjes_productor').select('*').eq('productor_id', perfil.id).order('creado_en', { ascending: false }).limit(20),
-      supabase.from('membresias_productor').select('*').eq('productor_id', perfil.id).order('periodo', { ascending: false }).limit(12),
-    ])
-    setCanjes(c.data || [])
-    setMems(m.data || [])
+// Rendición mensual: porcentaje pactado sobre el ingreso, menos el valor de los puntos obtenidos.
+function Cuenta({ perfil, inicio }) {
+  const [tickets, setTickets] = useState(null)
+  useEffect(() => {
+    supabase.from('rendiciones_productor').select('*').eq('productor_id', perfil.id)
+      .order('periodo', { ascending: false }).limit(12).then(({ data }) => setTickets(data || []))
   }, [perfil.id])
-  useEffect(() => { cargar() }, [cargar])
-
-  async function pedirCanje(e) {
-    e.preventDefault()
-    setMsg(null)
-    const n = Number(puntos)
-    if (!Number.isFinite(n) || n <= 0) return setMsg({ tipo: 'error', texto: 'Poné cuántos puntos querés canjear.' })
-    const { error } = await supabase.rpc('pedir_canje', { p_puntos: n })
-    if (error) return setMsg({ tipo: 'error', texto: error.message })
-    setPuntos('')
-    setMsg({ tipo: 'ok', texto: 'Pedido de canje enviado. Los puntos se descuentan cuando el administrador lo aprueba.' })
-    cargar(); recargar()
-  }
-
-  async function informarPago(m) {
-    setMsg(null)
-    const n = Number(usar[m.id] || 0)
-    if (!Number.isFinite(n) || n < 0) return setMsg({ tipo: 'error', texto: 'Cantidad de puntos inválida.' })
-    const { data, error } = await supabase.rpc('informar_pago_membresia', { p_id: m.id, p_puntos: n })
-    if (error) return setMsg({ tipo: 'error', texto: error.message })
-    setMsg({ tipo: 'ok', texto: 'Pago informado con ' + fmt(n) + ' puntos. Te quedan ' + pesos(data) + ' para pagar en pesos; el administrador lo valida cuando los reciba.' })
-    cargar(); recargar()
-  }
 
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Cuenta</h2>
-      <Msg m={msg} />
-
-      <form className="card" onSubmit={pedirCanje}>
-        <h3>Canjear puntos por plata</h3>
-        <p>Disponibles: <b className="pts">{inicio ? fmt(inicio.puntos_disponibles) : '...'}</b>{inicio ? ' (equivalen a ' + pesos(inicio.puntos_disponibles_pesos) + ')' : ''}</p>
-        <p className="mu">Cada punto vale lo que valía el día que el socio lo gastó. Podés pedir todos los que tengas.</p>
-        <label htmlFor="cj-p">Puntos a canjear</label>
-        <input id="cj-p" type="number" min="0" step="0.01" value={puntos} onChange={(e) => setPuntos(e.target.value)} />
-        <button className="btn pri" style={{ marginTop: 12 }}>Pedir canje</button>
-      </form>
-      {canjes.length > 0 && (
-        <div className="card">
-          <h3>Mis canjes</h3>
-          {canjes.map((c) => {
-            const [clase, texto] = ESTADO_CANJE[c.estado]
-            return (
-              <div key={c.id} className="row" style={{ marginTop: 6 }}>
-                <span>{fechaHora(c.creado_en)} · {fmt(c.puntos)} pts · {pesos(c.monto_pesos != null ? c.monto_pesos : c.monto_estimado)}{c.estado === 'pendiente' ? ' (estimado)' : ''}</span>
-                <span className={'pill ' + clase}>{texto}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      <h2>Membresías</h2>
-      <p className="mu">Cada mes pagás el {inicio ? inicio.porcentaje : '5'}% de lo que facturaste el mes anterior, en pesos y puntos. Podés pagar con tus puntos, con pesos o mezclando: lo que no cubran los puntos lo pagás en pesos.</p>
-      {mems.length === 0 && <p className="mu">Todavía no tenés membresías. La primera se genera el día 1 del mes siguiente a tu primera venta.</p>}
-      {mems.map((m) => {
-        const [clase, texto] = ESTADO_MEM[m.estado]
+      <p className="mu">
+        Cada mes se hace tu rendición: el {inicio ? inicio.porcentaje : '5'}% de lo que facturaste (pesos más puntos), menos lo que valen los puntos que obtuviste.
+        Si da positivo, lo pagás vos; si da negativo, te paga el club. Los puntos no se canjean aparte: se descuentan acá.
+      </p>
+      {tickets === null && <p className="mu">Cargando...</p>}
+      {tickets && tickets.length === 0 && <p className="mu">Todavía no tenés rendiciones. La primera se genera el día 1 del mes siguiente.</p>}
+      {(tickets || []).map((t) => {
+        const res = Number(t.resultado)
         return (
-          <div key={m.id} className="card">
-            <div className="row"><b style={{ textTransform: 'capitalize' }}>{mesTxt(m.periodo)}</b><span className={'pill ' + clase}>{texto}</span></div>
-            <p>A pagar: <b>{pesos(m.monto)}</b></p>
-            <p className="mu">Ingreso del mes: {pesos(Number(m.ingreso_pesos) + Number(m.ingreso_puntos_pesos))} ({pesos(m.ingreso_pesos)} en pesos + {fmt(m.ingreso_puntos)} puntos = {pesos(m.ingreso_puntos_pesos)})</p>
-            {m.estado === 'pagada' && m.pagado_en && (
-              <p className="mu">Pagada el {fechaHora(m.pagado_en)}: {fmt(m.pagado_puntos)} puntos ({pesos(m.pagado_puntos_pesos)}) + {pesos(m.pagado_pesos)} en pesos.</p>
-            )}
-            {m.estado !== 'pagada' && (
-              <div style={{ marginTop: 8 }}>
-                {m.estado === 'informada' && <p className="mu">Informaste {fmt(m.informado_puntos)} puntos. Podés cambiarlo hasta que el administrador valide.</p>}
-                <label htmlFor={'mp-' + m.id}>Puntos que querés usar</label>
-                <input id={'mp-' + m.id} type="number" min="0" step="0.01" placeholder="0" value={usar[m.id] ?? ''}
-                  onChange={(e) => setUsar({ ...usar, [m.id]: e.target.value })} />
-                <button type="button" className="btn pri" style={{ marginTop: 12 }} onClick={() => informarPago(m)}>Informar pago</button>
-              </div>
+          <div key={t.id} className="card">
+            <div className="row">
+              <b style={{ textTransform: 'capitalize' }}>Ticket N.º {t.id} · {mesTxt(t.periodo)}</b>
+              <span className={'pill ' + (t.estado === 'pagado' ? 'ok' : 'warn')}>{t.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</span>
+            </div>
+            <p>Pedidos entregados: {t.pedidos}</p>
+            <p>Cobrado en pesos: {pesos(t.ingreso_pesos)}</p>
+            <p>Puntos obtenidos: {fmt(t.puntos)} (valen {pesos(t.puntos_pesos)})</p>
+            <p>Ingreso total: {pesos(Number(t.ingreso_pesos) + Number(t.puntos_pesos))}</p>
+            <p>{t.porcentaje}% acordado: {pesos(t.comision)}</p>
+            <p><b>{res > 0 ? 'A pagar por vos: ' + pesos(res) : res < 0 ? 'A pagar por el club: ' + pesos(-res) : 'Sin saldo'}</b></p>
+            {t.estado === 'pagado' && t.pagado_en && <p className="mu">Pagado el {fechaHora(t.pagado_en)}.</p>}
+            {t.estado === 'pendiente' && res > 0 && t.vence_gracia && (
+              <p className="mu">Podés seguir vendiendo hasta el {new Date(t.vence_gracia + 'T00:00:00').toLocaleDateString('es-AR')}.</p>
             )}
           </div>
         )
