@@ -52,8 +52,8 @@ export default function TiendaControl({ productorId = null, titulo = 'Mi tienda'
     for (const d of ORDEN) {
       const x = dias[d]
       if (!x.on) continue
-      if (!x.abre || !x.cierra || x.cierra <= x.abre) {
-        return setMsg({ tipo: 'error', texto: DIAS[d] + ': la hora de cierre tiene que ser después de la de apertura.' })
+      if (!x.abre || !x.cierra || x.cierra === x.abre) {
+        return setMsg({ tipo: 'error', texto: DIAS[d] + ': la hora de cierre tiene que ser distinta de la de apertura.' })
       }
       lista.push({ dia: d, abre: x.abre, cierra: x.cierra })
     }
@@ -107,9 +107,13 @@ export default function TiendaControl({ productorId = null, titulo = 'Mi tienda'
               <input type="time" aria-label={DIAS[d] + ' abre'} style={{ width: 'auto' }} disabled={!dias[d].on} value={dias[d].abre} onChange={(e) => poner(d, 'abre', e.target.value)} />
               <span className="mu">a</span>
               <input type="time" aria-label={DIAS[d] + ' cierra'} style={{ width: 'auto' }} disabled={!dias[d].on} value={dias[d].cierra} onChange={(e) => poner(d, 'cierra', e.target.value)} />
+              {dias[d].on && dias[d].cierra && dias[d].cierra < dias[d].abre && <span className="mu">cierra el día siguiente</span>}
             </div>
           ))}
-          <p className="mu" style={{ marginTop: 8 }}>Los días sin tildar quedan cerrados. Al guardar, cualquier orden manual anterior se borra.</p>
+          <p className="mu" style={{ marginTop: 8 }}>
+            Los días sin tildar quedan cerrados. Si el cierre es menor que la apertura (por ejemplo viernes de 20:00 a 02:00), cierra de madrugada del día siguiente.
+            Al guardar, cualquier orden manual anterior se borra.
+          </p>
           <button type="button" className="btn pri" style={{ marginTop: 10 }} onClick={guardar}>Guardar horarios</button>
         </div>
       )}

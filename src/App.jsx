@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
-import { Icon } from './ui'
+import { Icon, Msg } from './ui'
 import Login from './pages/Login'
 import Socio from './pages/Socio'
 import Panel from './pages/Panel'
@@ -20,6 +20,7 @@ export default function App() {
   const [perfil, setPerfil] = useState(null)
   const [error, setError] = useState('')
   const [marca, setMarca] = useState(MARCA_BASE)
+  const [recuperando, setRecuperando] = useState(false)
 
   const cargarMarca = useCallback(() => {
     supabase.from('configuracion').select('*').eq('id', 1).single()
@@ -30,7 +31,10 @@ export default function App() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data } = supabase.auth.onAuthStateChange((_evento, s) => setSession(s))
+    const { data } = supabase.auth.onAuthStateChange((evento, s) => {
+      if (evento === 'PASSWORD_RECOVERY') setRecuperando(true)
+      setSession(s)
+    })
     return () => data.subscription.unsubscribe()
   }, [])
 
@@ -42,8 +46,20 @@ export default function App() {
 
   if (session === undefined) return <p className="mu">Cargando...</p>
   if (!session) return <Login marca={marca} />
+  if (recuperando) return <NuevaClave marca={marca} onListo={() => setRecuperando(false)} />
   if (error) return <p className="msg error">No se pudo cargar tu perfil: {error}</p>
   if (!perfil) return <p className="mu">Cargando tu perfil...</p>
+  if (perfil.suspendido) {
+    return (
+      <div className="login">
+        <div className="card">
+          <h2>Cuenta suspendida</h2>
+          <p className="mu" style={{ margin: '8px 0 12px' }}>Tu cuenta está suspendida. Consultá con el administrador del club.</p>
+          <button className="btn" onClick={() => supabase.auth.signOut()}>Salir</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -64,5 +80,33 @@ export default function App() {
       {perfil.rol === 'productor' && <Productor perfil={perfil} />}
       {perfil.rol === 'admin' && <Panel esAdmin marca={marca} onMarca={cargarMarca} />}
     </>
+  )
+}
+
+// Pantalla a la que se llega desde el correo de "restablecer clave".
+function NuevaClave({ marca, onListo }) {
+  const [clave, setClave] = useState('')
+  const [msg, setMsg] = useState(null)
+
+  async function guardar(e) {
+    e.preventDefault()
+    setMsg(null)
+    const { error } = await supabase.auth.updateUser({ password: clave })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Clave actualizada.' })
+    setTimeout(onListo, 1200)
+  }
+
+  return (
+    <div className="login">
+      <h1 style={{ textAlign: 'center' }}>{marca.nombre_app}</h1>
+      <form className="card" onSubmit={guardar}>
+        <h3>Elegí tu clave nueva</h3>
+        <label htmlFor="nc">Contraseña nueva</label>
+        <input id="nc" type="password" minLength={6} value={clave} onChange={(e) => setClave(e.target.value)} required />
+        <button className="btn pri" style={{ width: '100%', marginTop: 16 }}>Guardar clave</button>
+        <Msg m={msg} />
+      </form>
+    </div>
   )
 }

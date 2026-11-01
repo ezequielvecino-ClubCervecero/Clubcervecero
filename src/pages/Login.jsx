@@ -15,6 +15,19 @@ export default function Login({ marca }) {
   const [msg, setMsg] = useState(null)
   const [enviando, setEnviando] = useState(false)
 
+  async function olvide() {
+    setMsg(null)
+    let correo = ident.trim()
+    if (!correo) return setMsg({ tipo: 'error', texto: 'Escribí tu usuario o correo y volvé a tocar "Olvidé mi clave".' })
+    if (!correo.includes('@')) {
+      const r = await supabase.rpc('email_de_usuario', { p_usuario: correo })
+      correo = r.data || ''
+    }
+    if (correo) await supabase.auth.resetPasswordForEmail(correo, { redirectTo: window.location.origin })
+    // Siempre el mismo mensaje, exista o no la cuenta.
+    setMsg({ tipo: 'ok', texto: 'Si la cuenta existe, te mandamos un correo para elegir una clave nueva.' })
+  }
+
   async function enviar(e) {
     e.preventDefault()
     setMsg(null)
@@ -41,7 +54,10 @@ export default function Login({ marca }) {
       res = await supabase.auth.signUp({ email, password: clave, options: { data: { usuario: usr, nombre: nombre.trim(), apellido: apellido.trim(), referente: referente.trim(), mayor_de_edad: 'true', registro_app: 'true' } } })
     }
     setEnviando(false)
-    if (res.error) return setMsg({ tipo: 'error', texto: res.error.message })
+    if (res.error) {
+      const m = res.error.message || ''
+      return setMsg({ tipo: 'error', texto: /banned/i.test(m) ? 'Tu cuenta está suspendida. Consultá con el administrador del club.' : m })
+    }
     if (modo === 'registrarse' && !res.data.session) {
       setMsg({ tipo: 'ok', texto: 'Cuenta creada. Revisá tu correo para confirmarla y después ingresá.' })
     }
@@ -69,6 +85,7 @@ export default function Login({ marca }) {
             <input id="ident" autoCapitalize="none" autoCorrect="off" value={ident} onChange={(e) => setIdent(e.target.value)} required />
             <label htmlFor="clave">Contraseña</label>
             <input id="clave" type="password" minLength={6} value={clave} onChange={(e) => setClave(e.target.value)} required />
+            <button type="button" className="btn" style={{ marginTop: 10 }} onClick={olvide}>Olvidé mi clave</button>
           </>
         ) : (
           <>

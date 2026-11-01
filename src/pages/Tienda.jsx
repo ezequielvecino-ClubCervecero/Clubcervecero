@@ -4,13 +4,14 @@ import { supabase } from '../supabaseClient'
 import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
 import MasVendidos from '../MasVendidos'
 import { cuando } from '../TiendaControl'
+import Reloj from '../Reloj'
 import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
 
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
 const PAGO_TXT = Object.fromEntries(PAGOS)
 const ENTREGAS = [['retiro', 'Retiro en el local'], ['envio', 'Envío a domicilio']]
 const pesos = (n) => '$ ' + fmt(n)
-const ESTADOS = { pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Entregado'], no_entregado: ['bad', 'No entregado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
+const ESTADOS = { pendiente: ['warn', 'En espera de confirmación'], confirmado: ['ok', 'Entregado'], no_entregado: ['bad', 'No entregado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
 // Cervecería de cada producto: la del productor, o el nombre del club (se edita en Marca).
 const cerveceriaDe = (p, club) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : club || 'Club Cervecero')
 
@@ -281,6 +282,7 @@ function MisPedidos({ perfil, version, club }) {
           <span className={'pill ' + clase}>{texto}</span>
         </div>
         <p className="mu">{fechaHora(p.creado_en)} · {PAGO_TXT[p.pago]}</p>
+        {p.estado === 'pendiente' && <Reloj creado={p.creado_en} />}
         <p className="mu">Cervecería: {p.productor_id ? (p.productores && p.productores.cerveceria) || '-' : club || 'Club Cervecero'}</p>
         {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
         <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts' : pesos(p.total_pesos)}</p>

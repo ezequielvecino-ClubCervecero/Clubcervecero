@@ -6,6 +6,7 @@ import Tienda from './Tienda'
 import Puesto from '../Puesto'
 import { MisDirecciones } from '../Direcciones'
 import MiUsuario from '../MiUsuario'
+import Reloj from '../Reloj'
 
 const COSTO_TRANSFERENCIA = 0.5
 const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
@@ -443,25 +444,34 @@ function Novedades() {
   )
 }
 
-// Pedidos que el vendedor ya aceptó y todavía no se entregaron.
+// Pedidos abiertos: esperando que el vendedor los acepte (con reloj) o ya aceptados y sin entregar.
 function PedidosEnCamino({ perfil }) {
   const [filas, setFilas] = useState([])
   useEffect(() => {
-    supabase.from('pedidos').select('id, numero, entrega, productor_id, productores(cerveceria)')
-      .eq('socio_id', perfil.id).eq('estado', 'aceptado').order('creado_en')
+    const cargarFilas = () => supabase.from('pedidos')
+      .select('id, numero, estado, entrega, creado_en, productor_id, productores(cerveceria)')
+      .eq('socio_id', perfil.id).in('estado', ['pendiente', 'aceptado']).order('creado_en')
       .then(({ data }) => setFilas(data || []))
+    cargarFilas()
+    const t = setInterval(cargarFilas, 20000)
+    return () => clearInterval(t)
   }, [perfil.id])
   if (filas.length === 0) return null
   return (
     <>
       <h2>Tus pedidos</h2>
       {filas.map((f) => (
-        <div key={f.id} className="card row">
-          <div>
-            <b>Pedido N.º {f.numero}</b>
-            {f.productor_id && f.productores && <p className="mu">{f.productores.cerveceria}</p>}
+        <div key={f.id} className="card">
+          <div className="row">
+            <div>
+              <b>Pedido N.º {f.numero}</b>
+              {f.productor_id && f.productores && <p className="mu">{f.productores.cerveceria}</p>}
+            </div>
+            <span className="pill warn">
+              {f.estado === 'pendiente' ? 'En espera de confirmación' : f.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}
+            </span>
           </div>
-          <span className="pill warn">{f.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}</span>
+          {f.estado === 'pendiente' && <Reloj creado={f.creado_en} />}
         </div>
       ))}
     </>

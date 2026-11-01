@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { MiUsuarioPropio } from '../MiUsuario'
+import Reloj from '../Reloj'
+import Usuarios from '../Usuarios'
 import { Icon, Msg, Navegacion, Categoria, CATS, fmt, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
 import MasVendidos from '../MasVendidos'
@@ -17,6 +19,7 @@ const ADMIN_MENU = [
   ['socios', 'Socios', 'Puntos y cuota de cada socio', 'crown'],
   ['facturacion', 'Facturación', 'Ventas del mes con detalle', 'crown'],
   ['cuota', 'Cuotas', 'Registrar pagos de cuota', 'crown'],
+  ['usuarios', 'Usuarios', 'Datos, clave y suspensión de cada usuario', 'crown'],
   ['ajuste', 'Ajustes y roles', 'Ajustar puntos y cambiar roles', 'hop'],
   ['productores', 'Productores', 'Pedidos, ventas y avisos', 'pint'],
   ['puntos', 'Puntos', 'Cuánto suma cada compra y referido', 'crown'],
@@ -116,6 +119,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
           {sub === 'socios' && <Socios />}
           {sub === 'facturacion' && <Facturacion />}
           {sub === 'cuota' && <Cuotas socios={soloSocios} recargar={cargarSocios} />}
+          {sub === 'usuarios' && <Usuarios />}
           {sub === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
           {sub === 'productores' && <ProductoresAdmin club={marca.nombre_app} />}
           {sub === 'puntos' && <PuntosAdmin />}
@@ -703,12 +707,21 @@ function Cobros({ onCambio, esAdmin }) {
     setPagos(a.data || [])
     setPedidos(b.data || [])
   }, [])
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => {
+    cargar()
+    const t = setInterval(cargar, 30000)
+    return () => clearInterval(t)
+  }, [cargar])
 
   async function resolver(promesa, ok) {
     setMsg(null)
-    const { error } = await promesa
+    const { data, error } = await promesa
     if (error) return setMsg({ tipo: 'error', texto: error.message })
+    if (data === 'vencido') {
+      setMsg({ tipo: 'error', texto: 'Ese pedido ya venció (pasaron 30 minutos): se canceló y se devolvieron stock y puntos.' })
+      await cargar()
+      return onCambio()
+    }
     setMsg({ tipo: 'ok', texto: ok })
     await cargar()
     onCambio()
@@ -764,6 +777,7 @@ function Cobros({ onCambio, esAdmin }) {
         {porAceptar.map((p) => (
           <div key={p.id} className="card">
             <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.creado_en)}</span></div>
+            <Reloj creado={p.creado_en} />
             <p>{quien(p)}</p>
             {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
             <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
@@ -1497,8 +1511,8 @@ function Estadisticas() {
 
         <h3 style={{ marginTop: 12 }}>En contra: {pesos(d.en_contra)}</h3>
         <FilaNum a="Rendiciones que paga el club a productores" b={pesos(d.paga_productores)} />
-        <FilaNum a={'Puntos regalados (' + fmt(d.regalo_puntos) + ' pts a ' + pesos(d.valor_punto) + ')'} b={pesos(d.regalo_pesos)} />
-        <p className="mu" style={{ marginTop: 8 }}>Puntos regalados: cargas del personal y bonos de compra y de referido. No incluye los costos de las cervecerías.</p>
+        <FilaNum a={'Puntos regalados (' + fmt(d.regalo_puntos) + ' pts, al valor del día)'} b={pesos(d.regalo_pesos)} />
+        <p className="mu" style={{ marginTop: 8 }}>Puntos regalados: cargas del personal, bonos de compra, de referido y de cuota, y ajustes positivos; cada uno al valor del punto del día en que se regaló. No incluye los costos de las cervecerías.</p>
       </div>
 
       <div className="card">

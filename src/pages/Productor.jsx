@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import MiUsuario from '../MiUsuario'
+import Reloj from '../Reloj'
 import { Msg, Navegacion, fmt, fechaHora, cap, imprimirTicket } from '../ui'
 import { subirImagenProducto } from '../imagenes'
 import TiendaControl from '../TiendaControl'
@@ -211,13 +212,10 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
       <h2>Para responder</h2>
       {pendientes.length === 0 && <p className="mu">No tenés pedidos pendientes.</p>}
       {pendientes.map((p) => {
-        const resta = LIMITE_MIN - Math.floor((ahora - new Date(p.creado_en).getTime()) / 60000)
         return (
           <div key={p.id} className="card" style={{ borderColor: 'var(--am)' }}>
             <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.creado_en)}</span></div>
-            <p className={resta <= 5 ? 'msg error' : 'mu'}>
-              {resta > 0 ? 'Te quedan ' + resta + ' min para responder.' : 'Se venció el plazo: se cancela en un momento.'}
-            </p>
+            <Reloj creado={p.creado_en} />
             <p>Socio N.º {String(p.socio_numero).padStart(4, '0')} · {(p.socio_nombre || '').trim() || 'Sin nombre'}</p>
             {items(p)}
             <p className="pts" style={{ marginTop: 6 }}>{total(p)}</p>
