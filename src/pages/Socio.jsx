@@ -6,6 +6,7 @@ import Tienda from './Tienda'
 import Puesto from '../Puesto'
 import { MisDirecciones } from '../Direcciones'
 import MiUsuario from '../MiUsuario'
+import { QrIdentificacion, EntradasSocio } from '../Entradas'
 import Reloj from '../Reloj'
 
 const COSTO_TRANSFERENCIA = 0.5
@@ -47,8 +48,9 @@ function Inicio({ perfil }) {
 
   return (
     <>
-      <div className="member">
-        <h2 style={{ margin: 0 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
+      <div className="member" style={{ position: 'relative' }}>
+        <QrIdentificacion codigo={p.codigo_qr} />
+        <h2 style={{ margin: 0, paddingRight: 84 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.usuario && <p className="mu">Usuario: {p.usuario}</p>}
@@ -296,6 +298,9 @@ function Canjes({ perfil }) {
         </div>
       )}
 
+      <EntradasSocio onSaldo={cargar} />
+
+      <h2>Premios</h2>
       <div className="chips">
         {CATS.map((c) => (
           <button key={c} className={'chip' + (c === cat ? ' on' : '')} onClick={() => setCat(c)}>
@@ -410,11 +415,16 @@ function ProximoEvento() {
           <p className="mu">{hora} h{cupos ? ' · ' + cupos : ''}</p>
           {ev.descripcion && <p className="mu">{ev.descripcion}</p>}
         </div>
-        <button className="btn" disabled={!ev.anotado && quedan === 0} onClick={alternar}>
-          {ev.anotado ? 'Cancelar inscripción' : 'Anotarme'}
-        </button>
+        {ev.entrada_pesos == null && (
+          <button className="btn" disabled={!ev.anotado && quedan === 0} onClick={alternar}>
+            {ev.anotado ? 'Cancelar inscripción' : 'Anotarme'}
+          </button>
+        )}
       </div>
-      {ev.anotado && <p className="msg ok">Estás anotado en este evento.</p>}
+      {ev.entrada_pesos != null && (
+        <p className="mu">Entrada: {'$ ' + fmt(ev.entrada_pesos)}{ev.entrada_puntos != null ? ' o ' + fmt(ev.entrada_puntos) + ' pts' : ''}. Comprala en la solapa Canjes.</p>
+      )}
+      {ev.entrada_pesos == null && ev.anotado && <p className="msg ok">Estás anotado en este evento.</p>}
       <Msg m={msg} />
     </>
   )

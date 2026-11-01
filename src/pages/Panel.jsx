@@ -11,6 +11,7 @@ import MasVendidos from '../MasVendidos'
 import { subirImagenProducto } from '../imagenes'
 import Movimientos from './Movimientos'
 import TiendaControl from '../TiendaControl'
+import { FichaEscaneo, EntradasPorCobrar, EntradasEvento } from '../Entradas'
 
 const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${[s.nombre, s.apellido].filter(Boolean).join(' ') || 'Sin nombre'}`
 
@@ -200,12 +201,20 @@ function Cupon() {
   const [cupon, setCupon] = useState(null)
   const [msg, setMsg] = useState(null)
   const [escaneando, setEscaneando] = useState(false)
+  const [ficha, setFicha] = useState(null)
 
-  const limpiar = () => { setCupon(null); setCodigo('') }
+  const limpiar = () => { setCupon(null); setFicha(null); setCodigo('') }
 
   async function consultar(cod) {
     setMsg(null)
     setCupon(null)
+    setFicha(null)
+    if (/^(SOC|ENT)-/i.test(cod.trim())) {
+      const { data: f, error: e2 } = await supabase.rpc('escanear_codigo', { p_codigo: cod })
+      if (e2) return setMsg({ tipo: 'error', texto: e2.message })
+      setCodigo(cod.trim().toUpperCase())
+      return setFicha(f)
+    }
     const { data, error } = await supabase.rpc('ver_cupon', { p_codigo: cod })
     if (error) return setMsg({ tipo: 'error', texto: error.message })
     setCupon(data)
@@ -213,7 +222,7 @@ function Cupon() {
 
   function leido(texto) {
     setEscaneando(false)
-    setCodigo(texto.slice(0, 8))
+    setCodigo(texto.slice(0, 12))
     consultar(texto)
   }
 
@@ -235,10 +244,11 @@ function Cupon() {
 
   return (
     <div className="card">
-      <h3>Canjear cupón</h3>
-      {!cupon && (
+      <h3>Canjear cupón o escanear socio</h3>
+      {ficha && <FichaEscaneo ficha={ficha} onCambio={() => consultar(codigo)} onVolver={limpiar} />}
+      {!cupon && !ficha && (
         <>
-          <p className="mu" style={{ marginTop: 6 }}>Escaneá el QR del cupón o escribí el código de 8 caracteres.</p>
+          <p className="mu" style={{ marginTop: 6 }}>Escaneá el QR del cupón, del socio o de una entrada, o escribí el código de 8 caracteres.</p>
           {escaneando
             ? <Escaner onLeido={leido} onCerrar={() => setEscaneando(false)} />
             : <button type="button" className="btn pri" style={{ marginTop: 12 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
@@ -790,6 +800,8 @@ function Cobros({ onCambio, esAdmin }) {
         ))}
       </div>
 
+      <EntradasPorCobrar />
+
       <div className="card">
         <div className="row">
           <h3>Pedidos en proceso</h3>
@@ -1211,6 +1223,7 @@ function EventosCerveceros() {
       <div><label htmlFor={id + '-t'}>Título</label><input id={id + '-t'} value={e.titulo} onChange={(x) => set('titulo', x.target.value)} required /></div>
       <div><label htmlFor={id + '-f'}>Fecha y hora</label><input id={id + '-f'} type="datetime-local" value={e.fecha} onChange={(x) => set('fecha', x.target.value)} required /></div>
       <div><label htmlFor={id + '-l'}>Lugar</label><input id={id + '-l'} value={e.lugar} onChange={(x) => set('lugar', x.target.value)} /></div>
+      <div><label htmlFor={id + '-p'}>Precio de la entrada en pesos (vacío = sin venta de entradas)</label><input id={id + '-p'} type="number" min="0" step="1" value={e.entrada_pesos} onChange={(x) => set('entrada_pesos', x.target.value)} /></div>
       <div style={{ gridColumn: '1 / -1' }}><label htmlFor={id + '-d'}>Descripción (opcional)</label><input id={id + '-d'} value={e.descripcion} onChange={(x) => set('descripcion', x.target.value)} /></div>
     </div>
   )
@@ -1240,7 +1253,8 @@ function EventosCerveceros() {
 }
 
 function EventosClub() {
-  const vacio = { titulo: '', descripcion: '', fecha: '', cupos: '' }
+  const vacio = { titulo: '', descripcion: '', fecha: '', cupos: '', entrada_pesos: '' }
+  const [conEntradas, setConEntradas] = useState(null)
   const [abierto, setAbierto] = useState(null)
   const [anotados, setAnotados] = useState({})
   const [lista, setLista] = useState([])
@@ -1250,7 +1264,7 @@ function EventosClub() {
   const cargar = useCallback(async () => {
     const { data } = await supabase.from('eventos').select('*, inscripciones_eventos(count)').order('fecha', { ascending: false })
     setLista((data || []).map((e) => ({
-      ...e, fecha: aCampo(e.fecha), cupos: e.cupos ?? '', descripcion: e.descripcion ?? '',
+      ...e, fecha: aCampo(e.fecha), cupos: e.cupos ?? '', descripcion: e.descripcion ?? '', entrada_pesos: e.entrada_pesos ?? '',
       anotados: e.inscripciones_eventos && e.inscripciones_eventos[0] ? e.inscripciones_eventos[0].count : 0,
     })))
   }, [])
@@ -1272,6 +1286,7 @@ function EventosClub() {
   const datos = (e) => ({
     titulo: e.titulo.trim(), descripcion: e.descripcion.trim() || null, fecha: deCampo(e.fecha),
     cupos: e.cupos === '' ? null : Math.max(0, Math.floor(Number(e.cupos))),
+    entrada_pesos: e.entrada_pesos === '' ? null : Math.max(0, Number(e.entrada_pesos)),
   })
 
   async function guardar(e) {
@@ -1319,9 +1334,11 @@ function EventosClub() {
         <div key={e.id} className="card">
           {campos(e, (c, v) => editar(e.id, c, v), e.id)}
           <div className="row" style={{ marginTop: 8 }}>
-            <span className="mu">Anotados: {e.anotados}</span>
+            <span className="mu">{e.entrada_pesos !== '' ? 'Con venta de entradas (el precio en puntos se calcula solo)' : 'Anotados: ' + e.anotados}</span>
+            {e.entrada_pesos !== '' && <button type="button" className="btn" onClick={() => setConEntradas(conEntradas === e.id ? null : e.id)}>{conEntradas === e.id ? 'Ocultar entradas' : 'Ver entradas'}</button>}
             <button type="button" className="btn" onClick={() => verAnotados(e)}>{abierto === e.id ? 'Ocultar anotados' : 'Ver anotados'}</button>
           </div>
+          {conEntradas === e.id && <EntradasEvento evento={e.id} />}
           {abierto === e.id && (
             <div style={{ marginTop: 8 }}>
               {(anotados[e.id] || []).length === 0 && <p className="mu">Todavía no se anotó nadie.</p>}
@@ -1605,6 +1622,8 @@ function Estadisticas() {
 
         <h3 style={{ marginTop: 12 }}>En contra: {pesos(d.en_contra)}</h3>
         <FilaNum a="Rendiciones que paga el club a productores" b={pesos(d.paga_productores)} />
+        <FilaNum a={'Entradas vendidas en pesos o transferencia (' + (d.entradas_n ?? 0) + ' en total)'} b={pesos(d.entradas_pesos ?? 0)} />
+        <FilaNum a={'Entradas vendidas con puntos (' + fmt(d.entradas_puntos ?? 0) + ' pts a ' + pesos(d.valor_punto) + ')'} b={pesos(d.entradas_puntos_pesos ?? 0)} />
         <FilaNum a={'Puntos regalados (' + fmt(d.regalo_puntos) + ' pts, al valor del día)'} b={pesos(d.regalo_pesos)} />
         <p className="mu" style={{ marginTop: 8 }}>Puntos regalados: cargas del personal, bonos de compra, de referido y de cuota, y ajustes positivos; cada uno al valor del punto del día en que se regaló. No incluye los costos de las cervecerías.</p>
       </div>
