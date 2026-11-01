@@ -2,7 +2,7 @@
 // El administrador ve ademas las pestañas Cuotas y Ajustes y roles.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { Icon, Msg, Navegacion, Categoria, CATS, fmt, fechaHora } from '../ui'
+import { Icon, Msg, Navegacion, Categoria, CATS, fmt, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
 import MasVendidos from '../MasVendidos'
 import { subirImagenProducto } from '../imagenes'
@@ -12,6 +12,7 @@ import TiendaControl from '../TiendaControl'
 const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${[s.nombre, s.apellido].filter(Boolean).join(' ') || 'Sin nombre'}`
 
 const ADMIN_MENU = [
+  ['estadisticas', 'Estadísticas', 'Ganancia del club y cuenta de cada productor', 'crown'],
   ['socios', 'Socios', 'Puntos y cuota de cada socio', 'crown'],
   ['facturacion', 'Facturación', 'Ventas del mes con detalle', 'crown'],
   ['cuota', 'Cuotas', 'Registrar pagos de cuota', 'crown'],
@@ -104,16 +105,18 @@ export default function Panel({ esAdmin, marca, onMarca }) {
               </button>
             ))}
           </div>
+          <ZonaPeligro />
         </>
       )}
       {vista === 'admin' && esAdmin && sub && (
         <>
           <button type="button" className="btn" style={{ marginBottom: 12 }} onClick={() => setSub(null)}>← Volver al menú</button>
+          {sub === 'estadisticas' && <Estadisticas />}
           {sub === 'socios' && <Socios />}
           {sub === 'facturacion' && <Facturacion />}
           {sub === 'cuota' && <Cuotas socios={soloSocios} recargar={cargarSocios} />}
           {sub === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
-          {sub === 'productores' && <ProductoresAdmin />}
+          {sub === 'productores' && <ProductoresAdmin club={marca.nombre_app} />}
           {sub === 'puntos' && <PuntosAdmin />}
           {sub === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
         </>
@@ -680,50 +683,65 @@ function Cobros({ onCambio, esAdmin }) {
   return (
     <>
       {esAdmin && <TiendaControl titulo="Tienda del club" propia={false} />}
-      <h2 style={{ marginTop: 6 }}>Pagos de cuota informados</h2>
-      {pagos.length === 0 && <p className="mu">No hay avisos de pago pendientes.</p>}
-      {pagos.map((p) => (
-        <div key={p.id} className="card">
-          <b>{quien(p)}</b>
-          <p className="mu">Avisó el {fechaHora(p.creado_en)}. Confirmá solo si la plata ya llegó.</p>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button className="btn" onClick={() => resolverPago(p.id, false)}>Rechazar</button>
-            <button className="btn pri" onClick={() => resolverPago(p.id, true)}>Confirmar pago</button>
-          </div>
+      <div className="card">
+        <div className="row">
+          <h3>Pagos de cuota informados</h3>
+          <span className={'pill ' + (pagos.length ? 'warn' : 'ok')}>{pagos.length ? pagos.length + (pagos.length === 1 ? ' pendiente' : ' pendientes') : 'Sin pendientes'}</span>
         </div>
-      ))}
+        {pagos.length === 0 && <p className="mu">No hay avisos de pago pendientes.</p>}
+        {pagos.map((p) => (
+          <div key={p.id} className="card">
+            <b>{quien(p)}</b>
+            <p className="mu">Avisó el {fechaHora(p.creado_en)}. Confirmá solo si la plata ya llegó.</p>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={() => resolverPago(p.id, false)}>Rechazar</button>
+              <button className="btn pri" onClick={() => resolverPago(p.id, true)}>Confirmar pago</button>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      <h2>Pedidos por aceptar</h2>
-      {porAceptar.length === 0 && <p className="mu">No hay pedidos pendientes.</p>}
-      {porAceptar.map((p) => (
-        <div key={p.id} className="card">
-          <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.creado_en)}</span></div>
-          <p>{quien(p)}</p>
-          {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
-          <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
-          <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}</p>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button className="btn" onClick={() => resolverPedido(p.id, 'cancelar')}>Cancelar pedido</button>
-            <button className="btn pri" onClick={() => resolverPedido(p.id, 'aceptar')}>Aceptar pedido</button>
-          </div>
+      <div className="card">
+        <div className="row">
+          <h3>Pedidos por aceptar</h3>
+          <span className={'pill ' + (porAceptar.length ? 'warn' : 'ok')}>{porAceptar.length ? porAceptar.length + (porAceptar.length === 1 ? ' pendiente' : ' pendientes') : 'Sin pendientes'}</span>
         </div>
-      ))}
+        {porAceptar.length === 0 && <p className="mu">No hay pedidos pendientes.</p>}
+        {porAceptar.map((p) => (
+          <div key={p.id} className="card">
+            <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.creado_en)}</span></div>
+            <p>{quien(p)}</p>
+            {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+            <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
+            <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}</p>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={() => resolverPedido(p.id, 'cancelar')}>Cancelar pedido</button>
+              <button className="btn pri" onClick={() => resolverPedido(p.id, 'aceptar')}>Aceptar pedido</button>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      <h2>Pedidos en proceso</h2>
-      {enProceso.length === 0 && <p className="mu">No hay pedidos en proceso.</p>}
-      {enProceso.map((p) => (
-        <div key={p.id} className="card">
-          <div className="row"><b>Pedido N.º {p.numero}</b><span className="pill warn">{p.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}</span></div>
-          <p>{quien(p)}</p>
-          {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
-          <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
-          <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}. Al marcar entregado se cobra, se descuentan los puntos y cuenta en la facturación.</p>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button className="btn" onClick={() => resolverPedido(p.id, 'no_entregado')}>No entregado</button>
-            <button className="btn pri" onClick={() => resolverPedido(p.id, 'entregar')}>Entregado</button>
-          </div>
+      <div className="card">
+        <div className="row">
+          <h3>Pedidos en proceso</h3>
+          <span className={'pill ' + (enProceso.length ? 'warn' : 'ok')}>{enProceso.length ? enProceso.length + ' en proceso' : 'Sin pedidos'}</span>
         </div>
-      ))}
+        {enProceso.length === 0 && <p className="mu">No hay pedidos en proceso.</p>}
+        {enProceso.map((p) => (
+          <div key={p.id} className="card">
+            <div className="row"><b>Pedido N.º {p.numero}</b><span className="pill warn">{p.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}</span></div>
+            <p>{quien(p)}</p>
+            {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+            <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
+            <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}. Al marcar entregado se cobra, se descuentan los puntos y cuenta en la facturación.</p>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={() => resolverPedido(p.id, 'no_entregado')}>No entregado</button>
+              <button className="btn pri" onClick={() => resolverPedido(p.id, 'entregar')}>Entregado</button>
+            </div>
+          </div>
+        ))}
+      </div>
       <Msg m={msg} />
     </>
   )
@@ -744,7 +762,7 @@ export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria 
       <div><label htmlFor={id + '-p'}>Precio ($)</label><input id={id + '-p'} type="number" min="0" step="1" value={r.precio_pesos} onChange={(e) => set('precio_pesos', e.target.value)} required /></div>
       <div>
         <label>Precio en puntos</label>
-        <p className="mu">{r.precio_puntos != null ? fmt(r.precio_puntos) + ' pts (automático)' : 'Automático: 90% del precio, con el valor del punto'}</p>
+        <p className="mu">{r.precio_puntos != null ? fmt(r.precio_puntos) + ' pts (automático)' : 'Automático: precio en pesos ÷ valor del punto del cliente'}</p>
       </div>
       <div><label htmlFor={id + '-st'}>Stock (unidades)</label><input id={id + '-st'} type="number" min="0" step="1" value={r.stock} onChange={(e) => set('stock', e.target.value)} required /></div>
       <div style={{ gridColumn: '1 / -1' }}>
@@ -927,7 +945,7 @@ function Facturacion() {
       <div className="card">
         <div className="row">
           <button type="button" className="btn" aria-label="Mes anterior" onClick={() => mover(-1)}>◀</button>
-          <h3 style={{ textTransform: 'capitalize' }}>{mesLargo(per.a, per.m)}</h3>
+          <h3>{cap(mesLargo(per.a, per.m))}</h3>
           <button type="button" className="btn" aria-label="Mes siguiente" disabled={esActual} onClick={() => mover(1)}>▶</button>
         </div>
         <p className="mu" style={{ marginTop: 12 }}>Total facturado del mes</p>
@@ -1241,7 +1259,7 @@ function NovedadesAdmin() {
 const GRUPOS_PUNTOS = [
   {
     titulo: 'Puntos que se suman',
-    nota: 'La compra suma por cada pedido confirmado en la tienda (del club o de un productor) y por cada compra extra que carga el personal. El referido suma una vez, cuando el amigo confirma su correo.',
+    nota: 'La compra suma por cada pedido confirmado en la tienda (del club o de un productor) y por cada compra extra que carga el personal. El referido suma una sola vez, cuando el amigo invitado se vuelve Gold (al confirmarse su primera cuota).',
     campos: [
       ['bono_compra_miembro', 'Compra de un Miembro', 'Puntos que suma cada compra', 1000, 0.05],
       ['bono_compra_gold', 'Compra de un Miembro Gold', 'Puntos que suma cada compra', 1000, 0.05],
@@ -1255,10 +1273,17 @@ const GRUPOS_PUNTOS = [
     campos: [['monto_cuota', 'Monto de la cuota mensual ($)', 'Pesos por mes', 10000000, 1]],
   },
   {
-    titulo: 'Productores',
-    nota: 'El valor del punto se guarda en cada pedido pagado con puntos: si lo cambiás, no afecta a los puntos ya acumulados. También define el precio en puntos de los productos (90% del precio en pesos). Cada día 1 se genera la rendición del mes anterior: porcentaje sobre el ingreso (pesos más puntos) menos el valor de los puntos obtenidos.',
+    titulo: 'Valor del punto',
+    nota: 'Hay dos valores. El del cliente define el precio en puntos de cada producto (precio en pesos ÷ este valor). El del productor y el club se usa en las rendiciones, en la contabilidad y para valuar los puntos regalados. Si el del club es menor, pagar con puntos le sale más barato al cliente. El valor del club queda guardado en cada pedido pagado con puntos: si lo cambiás, no afecta lo ya vendido.',
     campos: [
-      ['valor_punto', 'Valor de cada punto ($)', 'Pesos que vale un punto para el productor', 1000000, 0.01],
+      ['valor_punto_cliente', 'Valor del punto para el cliente ($)', 'Con este valor se calcula el precio en puntos de los productos', 1000000, 0.01],
+      ['valor_punto', 'Valor del punto para el productor y el club ($)', 'Se usa en rendiciones y en la contabilidad del club', 1000000, 0.01],
+    ],
+  },
+  {
+    titulo: 'Productores',
+    nota: 'Cada día 1 se genera la rendición del mes anterior: porcentaje sobre el ingreso (pesos más puntos) menos el valor de los puntos obtenidos.',
+    campos: [
       ['membresia_porcentaje', 'Porcentaje pactado con productores (%)', 'Porcentaje del ingreso del mes anterior', 100, 0.1],
       ['membresia_dias_gracia', 'Días de gracia de la rendición', 'Días que puede seguir vendiendo si debe pagar', 365, 1],
     ],
@@ -1311,6 +1336,13 @@ function PuntosAdmin() {
               </div>
             ))}
           </div>
+          {g.titulo === 'Valor del punto' && Number(v.valor_punto_cliente) > 0 && (
+            <p className="mu" style={{ marginTop: 8 }}>
+              {Number(v.valor_punto) > Number(v.valor_punto_cliente)
+                ? 'Atención: el valor del club es mayor que el del cliente.'
+                : 'Con estos valores, pagar con puntos le sale al cliente un ' + fmt((1 - Number(v.valor_punto) / Number(v.valor_punto_cliente)) * 100) + '% más barato que en pesos.'}
+            </p>
+          )}
         </div>
       ))}
       <button className="btn pri">Guardar</button>
@@ -1319,7 +1351,202 @@ function PuntosAdmin() {
   )
 }
 
-function ProductoresAdmin() {
+const VERDE = 'var(--ok)'
+const ROJO = '#f87171'
+
+function FilaNum({ a, b, color, fuerte }) {
+  return (
+    <div className="row" style={{ marginTop: 4 }}>
+      <span className={fuerte ? undefined : 'mu'}>{a}</span>
+      <b style={color ? { color } : undefined}>{b}</b>
+    </div>
+  )
+}
+
+// Monitor del dia a dia: cuanto esta ganando o perdiendo el club y como queda con cada productor.
+function Estadisticas() {
+  const hoy = new Date(Date.now() - 3 * 3600 * 1000)
+  const actual = { a: hoy.getUTCFullYear(), m: hoy.getUTCMonth() }
+  const [per, setPer] = useState(actual)
+  const [todo, setTodo] = useState(false)
+  const [d, setD] = useState(null)
+  const [abierto, setAbierto] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const desde = todo ? '2000-01-01T00:00:00Z' : new Date(Date.UTC(per.a, per.m, 1, 3)).toISOString()
+    const hasta = todo ? '2100-01-01T00:00:00Z' : new Date(Date.UTC(per.a, per.m + 1, 1, 3)).toISOString()
+    const { data, error } = await supabase.rpc('monitor_admin', { p_desde: desde, p_hasta: hasta })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg(null)
+    setD(data)
+  }, [per, todo])
+
+  useEffect(() => {
+    cargar()
+    const t = setInterval(cargar, 30000)
+    return () => clearInterval(t)
+  }, [cargar])
+
+  const mover = (n) => setPer(({ a, m }) => {
+    const f = new Date(Date.UTC(a, m + n, 1))
+    return { a: f.getUTCFullYear(), m: f.getUTCMonth() }
+  })
+  const esActual = per.a === actual.a && per.m === actual.m
+
+  const encabezado = (
+    <div className="card">
+      <div className="row">
+        <button type="button" className="btn" aria-label="Mes anterior" disabled={todo} onClick={() => mover(-1)}>◀</button>
+        <h3>{todo ? 'Desde el inicio' : cap(mesLargo(per.a, per.m))}</h3>
+        <button type="button" className="btn" aria-label="Mes siguiente" disabled={todo || esActual} onClick={() => mover(1)}>▶</button>
+      </div>
+      <div className="chips">
+        <button type="button" className={'chip' + (!todo ? ' on' : '')} onClick={() => setTodo(false)}>Por mes</button>
+        <button type="button" className={'chip' + (todo ? ' on' : '')} onClick={() => setTodo(true)}>Todo el tiempo</button>
+      </div>
+      <p className="mu">Se actualiza solo cada 30 segundos. Cuenta lo que se entregó o cobró dentro del período.</p>
+    </div>
+  )
+
+  if (!d) return <><h2 style={{ marginTop: 6 }}>Estadísticas</h2>{encabezado}<Msg m={msg} /><p className="mu">Cargando...</p></>
+
+  const neto = Number(d.neto)
+  const ganando = neto >= 0
+  const prods = d.productores_detalle || []
+  const club = Number(d.cuotas) + Number(d.club_pesos) + Number(d.club_puntos_pesos)
+  const totalProd = Number(d.cobra_productores) - Number(d.paga_productores)
+
+  return (
+    <>
+      <h2 style={{ marginTop: 6 }}>Estadísticas</h2>
+      {encabezado}
+      <Msg m={msg} />
+
+      <div className="card" style={{ borderColor: ganando ? VERDE : ROJO }}>
+        <h3>{ganando ? 'La app está generando dinero' : 'La app está en pérdida'}</h3>
+        <p className="mu">Resultado del período, solo con la plata que mueve la app</p>
+        <p className="pts" style={{ fontSize: 34, color: ganando ? VERDE : ROJO }}>{(neto < 0 ? '- ' : '') + pesos(Math.abs(neto))}</p>
+
+        <h3 style={{ marginTop: 12 }}>A favor: {pesos(d.a_favor)}</h3>
+        <FilaNum a={'Cuotas de socios (' + d.cuotas_cant + ' pagos)'} b={pesos(d.cuotas)} />
+        <FilaNum a={'Ventas del club en pesos (' + d.club_pedidos + ' pedidos entregados)'} b={pesos(d.club_pesos)} />
+        <FilaNum a={'Ventas del club con puntos (' + fmt(d.club_puntos) + ' pts a ' + pesos(d.valor_punto) + ')'} b={pesos(d.club_puntos_pesos)} />
+        <FilaNum a="Rendiciones que pagan los productores" b={pesos(d.cobra_productores)} />
+
+        <h3 style={{ marginTop: 12 }}>En contra: {pesos(d.en_contra)}</h3>
+        <FilaNum a="Rendiciones que paga el club a productores" b={pesos(d.paga_productores)} />
+        <FilaNum a={'Puntos regalados (' + fmt(d.regalo_puntos) + ' pts a ' + pesos(d.valor_punto) + ')'} b={pesos(d.regalo_pesos)} />
+        <p className="mu" style={{ marginTop: 8 }}>Puntos regalados: cargas del personal y bonos de compra y de referido. No incluye los costos de las cervecerías.</p>
+      </div>
+
+      <div className="card">
+        <h3>Usuarios y compras</h3>
+        <FilaNum fuerte a="Usuarios registrados" b={d.usuarios} />
+        <FilaNum fuerte a="Usuarios comunes" b={d.comunes} />
+        <FilaNum fuerte a="Usuarios Gold" b={d.gold} />
+        <FilaNum fuerte a="Productores" b={d.productores} />
+        <FilaNum fuerte a="Compras entregadas del período" b={d.compras} />
+        <FilaNum a="Pedidos pendientes ahora" b={d.pedidos_pendientes} />
+        <FilaNum a="Pedidos en proceso ahora" b={d.pedidos_en_proceso} />
+      </div>
+
+      <h2>Cuenta con los productores</h2>
+      <p className="mu">Verde: el productor te tiene que pagar a vos. Rojo: le tenés que pagar vos. Tocá uno para ver el detalle.</p>
+      {prods.length === 0 && <p className="mu">Todavía no hay productores.</p>}
+      {prods.map((x) => {
+        const res = Number(x.resultado)
+        const color = res > 0 ? VERDE : res < 0 ? ROJO : undefined
+        return (
+          <div key={x.id} className="card" style={color ? { borderColor: color } : undefined}>
+            <button type="button" className="row" style={{ width: '100%', background: 'none', border: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', padding: 0 }}
+              aria-expanded={abierto === x.id} onClick={() => setAbierto(abierto === x.id ? null : x.id)}>
+              <b>{x.cerveceria || 'Sin nombre de cervecería'}</b>
+              <b style={color ? { color } : undefined}>{res === 0 ? 'Sin saldo' : (res > 0 ? '+ ' : '- ') + pesos(Math.abs(res))}</b>
+            </button>
+            <p className="mu">{res > 0 ? 'Te debe pagar a vos' : res < 0 ? 'Le tenés que pagar vos' : 'Sin saldo'}</p>
+            {abierto === x.id && (
+              <div style={{ marginTop: 8 }}>
+                <FilaNum a={'Pedidos entregados'} b={x.cant} />
+                <FilaNum a="Cobrado en pesos" b={pesos(x.pesos)} />
+                <FilaNum a={'Puntos recibidos (' + fmt(x.pts) + ' pts a ' + pesos(d.valor_punto) + ')'} b={pesos(x.pts_pesos)} />
+                <FilaNum a="Ingreso total" b={pesos(Number(x.pesos) + Number(x.pts_pesos))} />
+                <FilaNum a={'Porcentaje acordado (' + x.porcentaje + '%)'} b={pesos(x.comision)} />
+                <FilaNum a="Menos: valor de los puntos" b={pesos(x.pts_pesos)} />
+                <FilaNum fuerte a="Resultado" b={(res < 0 ? '- ' : '') + pesos(Math.abs(res))} color={color} />
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {prods.length > 0 && (
+        <FilaTotal etiqueta="Total con todos los productores" valor={totalProd} />
+      )}
+      <div className="card" style={{ borderColor: VERDE }}>
+        <div className="row"><b>Club (cuotas y ventas propias)</b><b style={{ color: VERDE }}>+ {pesos(club)}</b></div>
+        <p className="mu">Cuotas {pesos(d.cuotas)} · ventas en pesos {pesos(d.club_pesos)} · ventas con puntos {pesos(d.club_puntos_pesos)}</p>
+      </div>
+    </>
+  )
+}
+
+function FilaTotal({ etiqueta, valor }) {
+  const color = valor > 0 ? VERDE : valor < 0 ? ROJO : undefined
+  return (
+    <div className="card" style={color ? { borderColor: color } : undefined}>
+      <div className="row">
+        <b>{etiqueta}</b>
+        <b style={color ? { color } : undefined}>{valor === 0 ? 'Sin saldo' : (valor > 0 ? '+ ' : '- ') + pesos(Math.abs(valor))}</b>
+      </div>
+      <p className="mu">{valor > 0 ? 'En total, los productores te deben a vos' : valor < 0 ? 'En total, vos les debés a los productores' : ''}</p>
+    </div>
+  )
+}
+
+// Reinicio total: solo para antes del lanzamiento. Borra movimientos, no la configuracion.
+function ZonaPeligro() {
+  const [abierto, setAbierto] = useState(false)
+  const [txt, setTxt] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+
+  async function reiniciar() {
+    if (txt !== 'REINICIAR') return
+    if (!window.confirm('ÚLTIMO AVISO: se borran todos los pedidos, puntos, cupones, pagos de cuota y rendiciones. No se puede deshacer. ¿Seguro que querés reiniciar todo?')) return
+    setOcupado(true)
+    setMsg(null)
+    const { error } = await supabase.rpc('reiniciar_todo', { p_confirmacion: txt })
+    setOcupado(false)
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setTxt('')
+    setAbierto(false)
+    setMsg({ tipo: 'ok', texto: 'Listo: todo quedó en cero. Todos los socios son Miembro, con 0 puntos y la cuota vencida. Recargá la página para ver los datos nuevos.' })
+  }
+
+  return (
+    <div className="card" style={{ borderColor: ROJO, marginTop: 24 }}>
+      <h3 style={{ color: ROJO }}>Zona de peligro</h3>
+      <p className="mu">Acciones que no se pueden deshacer.</p>
+      {!abierto && <button type="button" className="btn" style={{ marginTop: 8, borderColor: ROJO, color: ROJO }} onClick={() => setAbierto(true)}>Reiniciar todo</button>}
+      {abierto && (
+        <div style={{ marginTop: 8 }}>
+          <p>Se borra solo lo que se movió: pedidos, puntos, cupones, pagos de cuota, avisos de pago, rendiciones e inscripciones a eventos.</p>
+          <p className="mu">Se conservan los usuarios, productores, productos y su stock, premios, eventos, novedades y la configuración. Todos los socios quedan como Miembro, con 0 puntos y la cuota vencida.</p>
+          <p className="msg error">Antes de seguir, hacé una copia de seguridad en Supabase. Esto no hace backup solo y no se puede deshacer.</p>
+          <label htmlFor="reiniciar">Para confirmar, escribí REINICIAR</label>
+          <input id="reiniciar" value={txt} autoComplete="off" onChange={(e) => setTxt(e.target.value)} />
+          <div className="row" style={{ marginTop: 10 }}>
+            <button type="button" className="btn" onClick={() => { setAbierto(false); setTxt('') }}>Cancelar</button>
+            <button type="button" className="btn pri" style={{ background: ROJO, borderColor: ROJO }} disabled={txt !== 'REINICIAR' || ocupado} onClick={reiniciar}>{ocupado ? 'Reiniciando...' : 'Reiniciar todo'}</button>
+          </div>
+        </div>
+      )}
+      <Msg m={msg} />
+    </div>
+  )
+}
+
+function ProductoresAdmin({ club }) {
   const hoy = new Date(Date.now() - 3 * 3600 * 1000)
   const actual = { a: hoy.getUTCFullYear(), m: hoy.getUTCMonth() }
   const [per, setPer] = useState(actual)
@@ -1424,14 +1651,17 @@ function ProductoresAdmin() {
             return (
               <div key={r.id} className="card">
                 <div className="row">
-                  <b>{(r.productores && r.productores.cerveceria) || 'Productor'} · <span style={{ textTransform: 'capitalize' }}>{mesDe(r.periodo)}</span></b>
+                  <b>{(r.productores && r.productores.cerveceria) || 'Productor'} · {cap(mesDe(r.periodo))}</b>
                   <span className={'pill ' + (res > 0 ? 'bad' : 'warn')}>Ticket N.º {r.id}</span>
                 </div>
                 <p>Cobrado en pesos: {pesos(r.ingreso_pesos)} · Puntos: {fmt(r.puntos)} (valen {pesos(r.puntos_pesos)})</p>
                 <p>{r.porcentaje}% sobre {pesos(Number(r.ingreso_pesos) + Number(r.puntos_pesos))} = {pesos(r.comision)}, menos {pesos(r.puntos_pesos)} en puntos</p>
                 <p><b>{res > 0 ? 'Debe pagar el productor: ' + pesos(res) : res < 0 ? 'Debe pagar el club: ' + pesos(-res) : 'Sin saldo'}</b></p>
                 {res > 0 && r.vence_gracia && <p className="mu">Puede vender hasta el {new Date(r.vence_gracia + 'T00:00:00').toLocaleDateString('es-AR')}; después se le ocultan los productos.</p>}
-                <button type="button" className="btn pri" style={{ marginTop: 8 }} onClick={() => pagarRendicion(r)}>Marcar como pagada</button>
+                <div className="row" style={{ marginTop: 8 }}>
+                  <button type="button" className="btn" onClick={() => imprimirTicket(r, r.productores && r.productores.cerveceria, club)}>Imprimir / PDF</button>
+                  <button type="button" className="btn pri" onClick={() => pagarRendicion(r)}>Marcar como pagada</button>
+                </div>
               </div>
             )
           })}
@@ -1441,7 +1671,7 @@ function ProductoresAdmin() {
       <div className="card">
         <div className="row">
           <button type="button" className="btn" aria-label="Mes anterior" onClick={() => mover(-1)}>◀</button>
-          <h3 style={{ textTransform: 'capitalize' }}>{mesLargo(per.a, per.m)}</h3>
+          <h3>{cap(mesLargo(per.a, per.m))}</h3>
           <button type="button" className="btn" aria-label="Mes siguiente" disabled={esActual} onClick={() => mover(1)}>▶</button>
         </div>
         <p className="mu" style={{ marginTop: 8 }}>La facturación de cada productor se cuenta en el mes en que marca el pedido como entregado.</p>
@@ -1467,7 +1697,7 @@ function ProductoresAdmin() {
             {pr.sin_cerrar > 0 && <p className="msg error">{pr.sin_cerrar} {pr.sin_cerrar === 1 ? 'pedido aceptado' : 'pedidos aceptados'} sin cerrar hace más de 7 días.</p>}
             {f && (
               <div style={{ marginTop: 8 }}>
-                <p className="mu" style={{ textTransform: 'capitalize' }}>Facturación de {mesLargo(per.a, per.m)} ({f.cant_pedidos} pedidos entregados)</p>
+                <p className="mu">Facturación de {mesLargo(per.a, per.m)} ({f.cant_pedidos} pedidos entregados)</p>
                 <p>Cobrado en pesos: <b>{pesos(f.pesos_cobrados)}</b></p>
                 <p>Puntos: <b className="pts">{fmt(f.puntos)}</b> (equivalen a {pesos(f.puntos_en_pesos)})</p>
                 <p>Ingreso total del mes: <b>{pesos(f.ingreso_total)}</b></p>
@@ -1490,6 +1720,7 @@ function ProductoresAdmin() {
                 {filas.length === 0 && <p className="mu">Todavía no tiene ventas entregadas.</p>}
                 {filas.length > 0 && (
                   <>
+                    <button type="button" className="btn" style={{ marginBottom: 10 }} onClick={() => imprimirVentas(pr.cerveceria, filas, club)}>Imprimir / PDF</button>
                     <h3>Total por producto</h3>
                     {porProducto(filas).map(([k, n]) => <p key={k}>{n} × {k}</p>)}
                     <h3 style={{ marginTop: 12 }}>Detalle (últimas {filas.length})</h3>

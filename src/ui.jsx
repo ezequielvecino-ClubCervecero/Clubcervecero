@@ -83,3 +83,71 @@ export function Categoria({ valor }) {
   const gold = valor === 'gold'
   return <span className={'pill ' + (gold ? 'gold' : 'cel')}>{gold ? 'Miembro Gold' : 'Miembro'}</span>
 }
+
+// Primera letra en mayuscula (ej. "octubre de 2026" -> "Octubre de 2026").
+export const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const $ = (n) => '$ ' + fmt(n)
+const mes = (iso) => cap(new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))
+
+// Abre una hoja limpia lista para imprimir o "Guardar como PDF" desde el navegador.
+export function imprimirHoja(titulo, cuerpoHtml) {
+  const w = window.open('', '_blank')
+  if (!w) {
+    window.alert('El navegador bloqueó la ventana. Permití las ventanas emergentes de este sitio y probá de nuevo.')
+    return
+  }
+  w.document.write(
+    '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' + esc(titulo) + '</title>' +
+    '<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;max-width:720px}' +
+    'h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 18px;font-weight:normal;color:#444}' +
+    'table{width:100%;border-collapse:collapse;margin-top:8px}td,th{padding:7px 4px;border-bottom:1px solid #ccc;text-align:left;font-size:14px}' +
+    'td.n,th.n{text-align:right}.tot td{font-weight:bold;border-top:2px solid #111;font-size:16px}' +
+    '.pie{margin-top:24px;font-size:12px;color:#666}.estado{display:inline-block;border:1px solid #111;padding:2px 10px;border-radius:12px;font-size:13px}' +
+    '@media print{button{display:none}body{margin:12mm}}</style></head><body>' + cuerpoHtml +
+    '<p class="pie">Impreso el ' + esc(new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })) + '</p>' +
+    '<button onclick="window.print()" style="margin-top:12px;padding:8px 16px">Imprimir / Guardar PDF</button>' +
+    '</body></html>')
+  w.document.close()
+  w.focus()
+  setTimeout(() => w.print(), 350)
+}
+
+// Ticket de rendicion mensual de un productor (lo usan el productor y el administrador).
+export function imprimirTicket(t, cerveceria, club) {
+  const res = Number(t.resultado)
+  const fila = (a, b) => '<tr><td>' + a + '</td><td class="n">' + b + '</td></tr>'
+  imprimirHoja('Ticket ' + t.id,
+    '<h1>' + esc(club || 'Club Cervecero') + '</h1>' +
+    '<h2>Rendición mensual · Ticket N.º ' + esc(t.id) + '</h2>' +
+    '<table>' +
+    fila('Cervecería', esc(cerveceria || 'Productor')) +
+    fila('Mes', esc(mes(t.periodo))) +
+    fila('Pedidos entregados', esc(t.pedidos)) +
+    fila('Cobrado en pesos', $(t.ingreso_pesos)) +
+    fila('Puntos obtenidos', esc(fmt(t.puntos)) + ' pts (valen ' + $(t.puntos_pesos) + ')') +
+    fila('Ingreso total', $(Number(t.ingreso_pesos) + Number(t.puntos_pesos))) +
+    fila('Porcentaje acordado', esc(t.porcentaje) + '% = ' + $(t.comision)) +
+    fila('Menos: valor de los puntos', $(t.puntos_pesos)) +
+    '<tr class="tot"><td>' + (res > 0 ? 'A pagar por el productor' : res < 0 ? 'A pagar por el club' : 'Sin saldo') + '</td><td class="n">' + $(Math.abs(res)) + '</td></tr>' +
+    '</table>' +
+    '<p style="margin-top:16px">Estado: <span class="estado">' + (t.estado === 'pagado' ? 'Pagado' : 'Pendiente') + '</span>' +
+    (t.estado === 'pagado' && t.pagado_en ? ' · ' + esc(new Date(t.pagado_en).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })) : '') + '</p>')
+}
+
+// Detalle de ventas entregadas de un productor.
+export function imprimirVentas(cerveceria, filas, club) {
+  const m = new Map()
+  filas.forEach((f) => {
+    const k = f.producto + (f.formato ? ' (' + f.formato + ')' : '')
+    m.set(k, (m.get(k) || 0) + f.cantidad)
+  })
+  const totales = [...m.entries()].sort((a, b) => b[1] - a[1])
+  imprimirHoja('Ventas ' + (cerveceria || ''),
+    '<h1>' + esc(club || 'Club Cervecero') + '</h1><h2>Ventas entregadas · ' + esc(cerveceria || 'Productor') + '</h2>' +
+    '<h3>Total por producto</h3><table>' + totales.map(([k, n]) => '<tr><td>' + esc(k) + '</td><td class="n">' + n + '</td></tr>').join('') + '</table>' +
+    '<h3 style="margin-top:20px">Detalle</h3><table><tr><th>Entrega</th><th>Pedido</th><th>Producto</th><th class="n">Cant.</th></tr>' +
+    filas.map((f) => '<tr><td>' + esc(fechaHora(f.fecha)) + '</td><td>' + esc(f.pedido) + '</td><td>' +
+      esc(f.producto + (f.formato ? ' (' + f.formato + ')' : '')) + '</td><td class="n">' + esc(f.cantidad) + '</td></tr>').join('') + '</table>')
+}

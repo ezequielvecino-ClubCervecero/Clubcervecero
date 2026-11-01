@@ -52,7 +52,7 @@ export default function Login({ marca }) {
             <input id="apellido" value={apellido} onChange={(e) => setApellido(e.target.value)} required />
             <label htmlFor="referente">Número de socio o apodo de quien te invitó (opcional)</label>
             <input id="referente" value={referente} onChange={(e) => setReferente(e.target.value)} />
-            <p className="mu" style={{ marginTop: 6 }}>Si lo escribís bien, esa persona suma 0,25 puntos cuando confirmes tu correo.</p>
+            <p className="mu" style={{ marginTop: 6 }}>Si lo escribís bien, esa persona suma puntos una sola vez, cuando te hagas Gold (al confirmarse tu primera cuota).</p>
           </>
         )}
         <label htmlFor="email">Correo</label>

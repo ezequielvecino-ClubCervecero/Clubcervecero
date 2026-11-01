@@ -199,7 +199,7 @@ function Perfil({ perfil }) {
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.apodo && <p className="mu">Apodo: {p.apodo}</p>}
-        <p className="mu" style={{ marginTop: 8 }}>Invitá a un amigo: si al crear su cuenta escribe tu número de socio{p.apodo ? ' o tu apodo' : ''}, sumás 0,25 puntos.</p>
+        <p className="mu" style={{ marginTop: 8 }}>Invitá a un amigo: si al crear su cuenta escribe tu número de socio{p.apodo ? ' o tu apodo' : ''}, sumás puntos una sola vez, cuando ese amigo se haga Gold (al confirmarse su primera cuota).</p>
       </div>
 
       <Acordeon titulo="Informar pago" icono="crown" abierto={abierta === 'pago'} onToggle={() => alternar('pago')}>

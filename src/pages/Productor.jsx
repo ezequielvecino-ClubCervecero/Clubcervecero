@@ -1,7 +1,7 @@
 // Pantalla del productor: inicio, pedidos, productos, rendición mensual y datos de su cervecería.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { Msg, Navegacion, fmt, fechaHora } from '../ui'
+import { Msg, Navegacion, fmt, fechaHora, cap, imprimirTicket } from '../ui'
 import { subirImagenProducto } from '../imagenes'
 import TiendaControl from '../TiendaControl'
 import { CamposProducto } from './Panel'
@@ -14,7 +14,7 @@ const ESTADOS = {
 }
 const LIMITE_MIN = 30
 const ZONA = 'America/Argentina/Buenos_Aires'
-const mesTxt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+const mesTxt = (iso) => cap(new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))
 const diasDesde = (ts) => Math.floor((Date.now() - new Date(ts).getTime()) / 86400000)
 
 export default function Productor({ perfil }) {
@@ -53,7 +53,7 @@ export default function Productor({ perfil }) {
       {vista === 'inicio' && <Inicio perfil={perfil} inicio={inicio} error={error} irA={setVista} />}
       {vista === 'pedidos' && <Pedidos pedidos={pedidos} resumen={resumen} datos={datos} error={error} recargar={cargar} />}
       {vista === 'productos' && <Productos perfil={perfil} datos={datos} oculto={!!(inicio && inicio.oculto)} />}
-      {vista === 'cuenta' && <Cuenta perfil={perfil} inicio={inicio} />}
+      {vista === 'cuenta' && <Cuenta perfil={perfil} inicio={inicio} datos={datos} />}
       {vista === 'datos' && <Datos perfil={perfil} datos={datos} onGuardado={cargar} />}
       <Navegacion
         items={[
@@ -140,8 +140,8 @@ function Inicio({ perfil, inicio, error, irA }) {
           {eventos.map((e) => (
             <div key={e.id} className="card">
               <b>{e.titulo}</b>
-              <p className="mu" style={{ textTransform: 'capitalize' }}>
-                {new Date(e.fecha).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: ZONA })} h
+              <p className="mu">
+                {cap(new Date(e.fecha).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: ZONA }))} h
                 {e.lugar ? ' · ' + e.lugar : ''}
               </p>
               {e.descripcion && <p>{e.descripcion}</p>}
@@ -329,7 +329,7 @@ function Productos({ perfil, datos, oculto }) {
     <>
       <h2 style={{ marginTop: 6 }}>Mis productos</h2>
       {oculto && <p className="msg error">Tus productos están ocultos para los socios por la rendición vencida. Mirá Inicio.</p>}
-      <p className="mu">El precio en puntos se calcula solo: es el 90% del precio en pesos, pasado a puntos con el valor del punto.</p>
+      <p className="mu">El precio en puntos se calcula solo: es el precio en pesos dividido por el valor del punto para el cliente (que fija el administrador).</p>
       {sinNombre
         ? <p className="msg error">Primero cargá el nombre de tu cervecería en Datos: es el que ven los socios en cada producto.</p>
         : (
@@ -359,7 +359,7 @@ function Productos({ perfil, datos, oculto }) {
 }
 
 // Rendición mensual: porcentaje pactado sobre el ingreso, menos el valor de los puntos obtenidos.
-function Cuenta({ perfil, inicio }) {
+function Cuenta({ perfil, inicio, datos }) {
   const [tickets, setTickets] = useState(null)
   useEffect(() => {
     supabase.from('rendiciones_productor').select('*').eq('productor_id', perfil.id)
@@ -380,7 +380,7 @@ function Cuenta({ perfil, inicio }) {
         return (
           <div key={t.id} className="card">
             <div className="row">
-              <b style={{ textTransform: 'capitalize' }}>Ticket N.º {t.id} · {mesTxt(t.periodo)}</b>
+              <b>Ticket N.º {t.id} · {mesTxt(t.periodo)}</b>
               <span className={'pill ' + (t.estado === 'pagado' ? 'ok' : 'warn')}>{t.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</span>
             </div>
             <p>Pedidos entregados: {t.pedidos}</p>
@@ -390,6 +390,7 @@ function Cuenta({ perfil, inicio }) {
             <p>{t.porcentaje}% acordado: {pesos(t.comision)}</p>
             <p><b>{res > 0 ? 'A pagar por vos: ' + pesos(res) : res < 0 ? 'A pagar por el club: ' + pesos(-res) : 'Sin saldo'}</b></p>
             {t.estado === 'pagado' && t.pagado_en && <p className="mu">Pagado el {fechaHora(t.pagado_en)}.</p>}
+            <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => imprimirTicket(t, datos && datos.cerveceria)}>Imprimir / PDF</button>
             {t.estado === 'pendiente' && res > 0 && t.vence_gracia && (
               <p className="mu">Podés seguir vendiendo hasta el {new Date(t.vence_gracia + 'T00:00:00').toLocaleDateString('es-AR')}.</p>
             )}
