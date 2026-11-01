@@ -1223,7 +1223,6 @@ function EventosCerveceros() {
       <div><label htmlFor={id + '-t'}>Título</label><input id={id + '-t'} value={e.titulo} onChange={(x) => set('titulo', x.target.value)} required /></div>
       <div><label htmlFor={id + '-f'}>Fecha y hora</label><input id={id + '-f'} type="datetime-local" value={e.fecha} onChange={(x) => set('fecha', x.target.value)} required /></div>
       <div><label htmlFor={id + '-l'}>Lugar</label><input id={id + '-l'} value={e.lugar} onChange={(x) => set('lugar', x.target.value)} /></div>
-      <div><label htmlFor={id + '-p'}>Precio de la entrada en pesos (vacío = sin venta de entradas)</label><input id={id + '-p'} type="number" min="0" step="1" value={e.entrada_pesos} onChange={(x) => set('entrada_pesos', x.target.value)} /></div>
       <div style={{ gridColumn: '1 / -1' }}><label htmlFor={id + '-d'}>Descripción (opcional)</label><input id={id + '-d'} value={e.descripcion} onChange={(x) => set('descripcion', x.target.value)} /></div>
     </div>
   )
@@ -1316,6 +1315,7 @@ function EventosClub() {
       <div><label htmlFor={id + '-t'}>Título</label><input id={id + '-t'} value={e.titulo} onChange={(x) => set('titulo', x.target.value)} required /></div>
       <div><label htmlFor={id + '-f'}>Fecha y hora</label><input id={id + '-f'} type="datetime-local" value={e.fecha} onChange={(x) => set('fecha', x.target.value)} required /></div>
       <div><label htmlFor={id + '-c'}>Cupos (vacío = sin límite)</label><input id={id + '-c'} type="number" min="0" step="1" value={e.cupos} onChange={(x) => set('cupos', x.target.value)} /></div>
+      <div><label htmlFor={id + '-p'}>Precio de la entrada en pesos (vacío = sin venta de entradas)</label><input id={id + '-p'} type="number" min="0" step="1" value={e.entrada_pesos} onChange={(x) => set('entrada_pesos', x.target.value)} /></div>
       <div style={{ gridColumn: '1 / -1' }}><label htmlFor={id + '-d'}>Descripción (opcional)</label><input id={id + '-d'} value={e.descripcion} onChange={(x) => set('descripcion', x.target.value)} /></div>
     </div>
   )
