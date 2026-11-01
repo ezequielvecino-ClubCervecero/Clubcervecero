@@ -503,17 +503,27 @@ function Socios() {
   const [msg, setMsg] = useState(null)
   const [version, setVersion] = useState(0)
   const [historial, setHistorial] = useState(null)
+  const [solicitudes, setSolicitudes] = useState([])
 
   useEffect(() => {
     Promise.all([
       supabase.rpc('resumen_socios'),
-      supabase.from('perfiles').select('id, apellido'),
-    ]).then(([r, a]) => {
+      supabase.from('perfiles').select('id, apellido, telefono'),
+      supabase.rpc('listar_solicitudes_nombre'),
+    ]).then(([r, a, sol]) => {
       if (r.error) return setMsg({ tipo: 'error', texto: r.error.message })
-      const ap = Object.fromEntries((a.data || []).map((x) => [x.id, x.apellido]))
-      setLista((r.data || []).map((s) => ({ ...s, apellido: ap[s.id] || '' })))
+      const ap = Object.fromEntries((a.data || []).map((x) => [x.id, x]))
+      setLista((r.data || []).map((s) => ({ ...s, apellido: (ap[s.id] && ap[s.id].apellido) || '', telefono: (ap[s.id] && ap[s.id].telefono) || '' })))
+      setSolicitudes(sol.data || [])
     })
   }, [version])
+
+  async function resolver(id, aprobar) {
+    setMsg(null)
+    const { error } = await supabase.rpc('resolver_solicitud_nombre', { p_id: id, p_aprobar: aprobar })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setVersion((x) => x + 1)
+  }
 
   const ordenada = [...lista].sort((a, b) =>
     orden === 'numero' ? a.numero_socio - b.numero_socio : Number(b[orden]) - Number(a[orden]))
@@ -530,10 +540,24 @@ function Socios() {
         ))}
       </div>
       <Msg m={msg} />
+      {solicitudes.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--am)' }}>
+          <div className="row"><b>Cambios de nombre por aprobar</b><span className="pill warn">{solicitudes.length}</span></div>
+          {solicitudes.map((q) => (
+            <div key={q.id} className="card">
+              <p>Socio N.º {String(q.numero_socio).padStart(4, '0')}: <span className="mu">{[q.nombre_actual, q.apellido_actual].filter(Boolean).join(' ') || 'sin nombre'}</span> pasa a <b>{[q.nombre_nuevo, q.apellido_nuevo].filter(Boolean).join(' ')}</b></p>
+              <div className="row" style={{ marginTop: 8, justifyContent: 'flex-start' }}>
+                <button type="button" className="btn pri" onClick={() => resolver(q.id, true)}>Aprobar</button>
+                <button type="button" className="btn" onClick={() => resolver(q.id, false)}>Rechazar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {elegido && <HistorialSocio socio={elegido} />}
       <div className="scroll">
         <table>
-          <thead><tr><th>#</th><th>Socio</th><th>Puntos actuales</th><th>Puntos adquiridos</th><th>Cuota</th><th>Categoría</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Socio</th><th>Puntos actuales</th><th>Puntos adquiridos</th><th>Cuota</th><th>Categoría</th><th>Teléfono</th><th></th></tr></thead>
           <tbody>
             {ordenada.map((s, i) => {
               const [clase, texto] = cuotaPill(s)
@@ -545,6 +569,7 @@ function Socios() {
                   <td>{fmt(s.acumulado)}</td>
                   <td><span className={'pill ' + clase}>{texto}</span></td>
                   <td><Categoria valor={s.categoria} /></td>
+                  <td>{s.telefono || <span className="mu">-</span>}</td>
                   <td><button type="button" className="btn" onClick={() => { setHistorial(historial === s.id ? null : s.id); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>{historial === s.id ? 'Ocultar' : 'Historial'}</button></td>
                 </tr>
               )

@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { Icon, Coin, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, fechaHora, TIPOS } from '../ui'
 import Tienda from './Tienda'
 import Puesto from '../Puesto'
+import { MisDirecciones } from '../Direcciones'
 
 const COSTO_TRANSFERENCIA = 0.5
 const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
@@ -208,6 +209,10 @@ function Perfil({ perfil }) {
 
       <Acordeon titulo="Mis datos" icono="crown" abierto={abierta === 'datos'} onToggle={() => alternar('datos')}>
         <MisDatos p={p} onListo={cargar} />
+      </Acordeon>
+
+      <Acordeon titulo="Mis direcciones" icono="pint" abierto={abierta === 'dirs'} onToggle={() => alternar('dirs')}>
+        <MisDirecciones perfil={perfil} />
       </Acordeon>
 
       <Acordeon titulo="Mi apodo" icono="hop" abierto={abierta === 'apodo'} onToggle={() => alternar('apodo')}>
@@ -460,14 +465,28 @@ function PedidosEnCamino({ perfil }) {
 function MisDatos({ p, onListo }) {
   const [nombre, setNombre] = useState(p.nombre || '')
   const [apellido, setApellido] = useState(p.apellido || '')
+  const [telefono, setTelefono] = useState(p.telefono || '')
+  const [pendiente, setPendiente] = useState(null)
   const [msg, setMsg] = useState(null)
+
+  const cargarPendiente = useCallback(async () => {
+    const { data } = await supabase.from('solicitudes_nombre').select('*').eq('socio_id', p.id).eq('estado', 'pendiente').maybeSingle()
+    setPendiente(data || null)
+  }, [p.id])
+  useEffect(() => { cargarPendiente() }, [cargarPendiente])
 
   async function guardar(e) {
     e.preventDefault()
     setMsg(null)
-    const { error } = await supabase.rpc('guardar_mis_datos', { p_nombre: nombre, p_apellido: apellido })
+    const tel = await supabase.rpc('guardar_mi_telefono', { p_telefono: telefono })
+    if (tel.error) return setMsg({ tipo: 'error', texto: tel.error.message })
+    const { data, error } = await supabase.rpc('guardar_mis_datos', { p_nombre: nombre, p_apellido: apellido })
     if (error) return setMsg({ tipo: 'error', texto: error.message })
-    setMsg({ tipo: 'ok', texto: 'Datos guardados.' })
+    setMsg({
+      tipo: 'ok',
+      texto: data === 'solicitud' ? 'Teléfono guardado. El cambio de nombre quedó pendiente: lo tiene que aprobar el administrador.' : 'Datos guardados.',
+    })
+    cargarPendiente()
     onListo()
   }
 
@@ -477,6 +496,12 @@ function MisDatos({ p, onListo }) {
       <input id="md-n" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
       <label htmlFor="md-a">Apellido</label>
       <input id="md-a" value={apellido} onChange={(e) => setApellido(e.target.value)} />
+      <p className="mu">Si ya tenés nombre y apellido cargados, el cambio necesita la aprobación del administrador.</p>
+      {pendiente && (
+        <p className="msg ok">Cambio pendiente de aprobación: {[pendiente.nombre_nuevo, pendiente.apellido_nuevo].filter(Boolean).join(' ')}.</p>
+      )}
+      <label htmlFor="md-t">Teléfono (opcional)</label>
+      <input id="md-t" type="tel" inputMode="tel" placeholder="2215551234" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
       <button className="btn pri" style={{ marginTop: 12 }}>Guardar</button>
       <Msg m={msg} />
     </form>

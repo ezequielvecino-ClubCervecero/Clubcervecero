@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
 import MasVendidos from '../MasVendidos'
 import { cuando } from '../TiendaControl'
+import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
 
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
 const PAGO_TXT = Object.fromEntries(PAGOS)
@@ -13,7 +14,7 @@ const ESTADOS = { pendiente: ['warn', 'Pendiente'], confirmado: ['ok', 'Entregad
 // Cervecería de cada producto: la del productor, o el nombre del club (se edita en Marca).
 const cerveceriaDe = (p, club) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : club || 'Club Cervecero')
 
-function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, totalPesos, totalPuntos, aviso }) {
+function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, mapa, totalPesos, totalPuntos, aviso }) {
   const L = []
   L.push('Hola! Hice el pedido N.º ' + numero + ' en la app del club.')
   L.push('Socio N.º ' + String(perfil.numero_socio).padStart(4, '0') + (perfil.nombre ? ' - ' + perfil.nombre : ''))
@@ -26,6 +27,7 @@ function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, totalP
   L.push('Total: ' + (pago === 'puntos' ? fmt(totalPuntos) + ' puntos' : pesos(totalPesos)))
   L.push('Forma de pago: ' + PAGO_TXT[pago])
   L.push(entrega === 'envio' ? 'Entrega: envío a ' + direccion : 'Entrega: retiro en el local')
+  if (entrega === 'envio' && mapa) L.push('Ubicación: ' + mapa)
   if (entrega === 'envio' && aviso) { L.push(''); L.push(aviso) }
   return L.join('\n')
 }
@@ -40,6 +42,9 @@ export default function Tienda({ perfil }) {
   const [pago, setPago] = useState('efectivo')
   const [entrega, setEntrega] = useState('retiro')
   const [direccion, setDireccion] = useState('')
+  const [coords, setCoords] = useState(null)
+  const [guardadas, recargarDirs] = useDirecciones(perfil.id)
+  const [dirSel, setDirSel] = useState(null) // id de una guardada, o 'nueva'
   const [msg, setMsg] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [listo, setListo] = useState(null)
@@ -81,19 +86,29 @@ export default function Tienda({ perfil }) {
   const totalPuntos = sePuedePuntos ? lineas.reduce((a, l) => a + l.precio_puntos * l.cantidad, 0) : 0
   const puntosOk = sePuedePuntos && saldo >= totalPuntos
   const pagoValido = pago !== 'puntos' || puntosOk
-  const direccionOk = entrega === 'retiro' || direccion.trim().length > 4
+  // Con direcciones guardadas se elige una; si no hay, se escribe una nueva.
+  const modoNueva = dirSel === 'nueva' || guardadas.length === 0
+  const elegida = !modoNueva ? (guardadas.find((d) => d.id === dirSel) || guardadas[0]) : null
+  const dirFinal = elegida ? elegida.direccion : direccion.trim()
+  const coordsFinal = elegida ? (elegida.lat != null ? { lat: Number(elegida.lat), lng: Number(elegida.lng) } : null) : coords
+  const direccionOk = entrega === 'retiro' || dirFinal.length > 4
   const vendedores = new Set(lineas.map((l) => l.productor_id || '')).size
 
   async function confirmar() {
     setMsg(null)
     setEnviando(true)
-    const snapshot = { lineas, pago, entrega, direccion: direccion.trim(), totalPesos, totalPuntos, aviso: config.aviso_envio }
+    const snapshot = { lineas, pago, entrega, direccion: dirFinal, mapa: coordsFinal ? linkMapas(coordsFinal.lat, coordsFinal.lng) : null, totalPesos, totalPuntos, aviso: config.aviso_envio }
     const { data, error } = await supabase.rpc('crear_pedido', {
       p_items: lineas.map((l) => ({ producto_id: l.id, cantidad: l.cantidad })),
-      p_pago: pago, p_entrega: entrega, p_direccion: entrega === 'envio' ? direccion.trim() : null,
+      p_pago: pago, p_entrega: entrega, p_direccion: entrega === 'envio' ? dirFinal : null,
     })
     setEnviando(false)
     if (error) { await cargar(); return setMsg({ tipo: 'error', texto: error.message }) }
+    // La dirección queda guardada para la próxima compra (si falla, el pedido igual se hizo).
+    if (entrega === 'envio') {
+      await supabase.rpc('guardar_direccion', { p_direccion: dirFinal, p_lat: coordsFinal ? coordsFinal.lat : null, p_lng: coordsFinal ? coordsFinal.lng : null })
+      recargarDirs()
+    }
     // Un pedido por cervecería: cada uno lleva su propio mensaje, al WhatsApp de quien lo atiende.
     const hechos = (data.pedidos || []).map((ped) => {
       const propias = lineas.filter((l) => (l.productor_id || null) === (ped.productor_id || null))
@@ -107,6 +122,8 @@ export default function Tienda({ perfil }) {
     setListo(hechos)
     setCarrito({})
     setDireccion('')
+    setCoords(null)
+    setDirSel(null)
     setVersion((v) => v + 1)
     cargar()
   }
@@ -205,8 +222,24 @@ export default function Tienda({ perfil }) {
           </div>
           {entrega === 'envio' && (
             <>
-              <label htmlFor="dir">Dirección de entrega</label>
-              <input id="dir" value={direccion} onChange={(e) => setDireccion(e.target.value)} />
+              <label>Dirección de entrega</label>
+              {guardadas.length > 0 && (
+                <div className="chips" style={{ marginTop: 0, flexDirection: 'column', alignItems: 'stretch' }}>
+                  {guardadas.map((d) => (
+                    <button key={d.id} type="button" className={'chip' + (!modoNueva && elegida && elegida.id === d.id ? ' on' : '')}
+                      onClick={() => setDirSel(d.id)} style={{ textAlign: 'left' }}>{d.direccion}</button>
+                  ))}
+                  <button type="button" className={'chip' + (modoNueva ? ' on' : '')} onClick={() => setDirSel('nueva')}>Otra dirección</button>
+                </div>
+              )}
+              {modoNueva && (
+                <>
+                  <input id="dir" aria-label="Dirección de entrega" placeholder="Calle, número y localidad" value={direccion}
+                    onChange={(e) => { setDireccion(e.target.value); setCoords(null) }} />
+                  <BotonUbicacion onResultado={(r) => { setDireccion(r.direccion); setCoords({ lat: r.lat, lng: r.lng }) }} />
+                </>
+              )}
+              {coordsFinal && <p className="mu" style={{ marginTop: 6 }}>Se va a mandar también el link de Google Maps con tu ubicación.</p>}
               {config.aviso_envio && <p className="mu" style={{ marginTop: 6 }}>{config.aviso_envio}</p>}
             </>
           )}
