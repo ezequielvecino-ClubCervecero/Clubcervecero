@@ -18,8 +18,8 @@ export function QrIdentificacion({ codigo }) {
   return (
     <>
       <button type="button" aria-label="Mostrar mi QR de socio" onClick={() => setGrande(true)}
-        style={{ position: 'absolute', top: 14, right: 14, background: '#fff', border: 0, borderRadius: 10, padding: 6, cursor: 'pointer', lineHeight: 0 }}>
-        <QRCodeSVG value={valor} size={64} />
+        style={{ position: 'absolute', top: 14, right: 14, background: "#fff", border: 0, borderRadius: 10, padding: 6, cursor: 'pointer', lineHeight: 0 }}>
+        <QRCodeSVG value={valor} size={100} />
       </button>
       {grande && (
         <div role="dialog" aria-label="Mi QR de socio" onClick={() => setGrande(false)}

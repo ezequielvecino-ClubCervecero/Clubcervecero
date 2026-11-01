@@ -50,7 +50,7 @@ function Inicio({ perfil }) {
     <>
       <div className="member" style={{ position: 'relative' }}>
         <QrIdentificacion codigo={p.codigo_qr} />
-        <h2 style={{ margin: 0, paddingRight: 84 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
+        <h2 style={{ margin: 0, paddingRight: 124 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.usuario && <p className="mu">Usuario: {p.usuario}</p>}
@@ -152,6 +152,7 @@ function Apodo({ p, onListo }) {
 function InformarPago() {
   const [ultimo, setUltimo] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [cargando, setCargando] = useState(false)
 
   const cargar = useCallback(async () => {
     const { data } = await supabase.from('pagos_informados').select('*').order('creado_en', { ascending: false }).limit(1)
@@ -167,9 +168,23 @@ function InformarPago() {
     cargar()
   }
 
+  async function pagarMP() {
+    setMsg(null)
+    setCargando(true)
+    const { data, error } = await supabase.functions.invoke('mp-crear-pago', { body: {} })
+    setCargando(false)
+    if (error || !data || !data.url) return setMsg({ tipo: 'error', texto: (data && data.error) || 'No se pudo abrir Mercado Pago. Probá de nuevo.' })
+    window.location.href = data.url
+  }
+
+  const volvio = new URLSearchParams(window.location.search).get('pago')
   const pendiente = ultimo && ultimo.estado === 'pendiente'
   return (
     <div style={{ marginBottom: 12 }}>
+      {volvio === 'ok' && <p className="msg ok">Pago recibido. En unos segundos se acredita tu cuota y tus puntos de regalo.</p>}
+      {volvio === 'pendiente' && <p className="msg">Tu pago está pendiente en Mercado Pago. Cuando se apruebe se acredita solo.</p>}
+      {volvio === 'error' && <p className="msg error">No se completó el pago. Podés intentar de nuevo.</p>}
+      <button className="btn pri" style={{ marginBottom: 10 }} disabled={cargando} onClick={pagarMP}><Icon name="crown" size={18} />{cargando ? 'Abriendo...' : 'Pagar la cuota con Mercado Pago'}</button>
       {pendiente
         ? <p className="mu">Pago informado el {fechaHora(ultimo.creado_en)}: pendiente de confirmación.</p>
         : <button className="btn" onClick={informar}><Icon name="crown" size={18} />Informar pago</button>}
@@ -208,7 +223,7 @@ function Perfil({ perfil }) {
         <p className="mu" style={{ marginTop: 8 }}>Invitá a un amigo: si al crear su cuenta escribe tu número de socio{p.apodo ? ' o tu apodo' : ''}, sumás puntos una sola vez, cuando ese amigo se haga Gold (al confirmarse su primera cuota).</p>
       </div>
 
-      <Acordeon titulo="Informar pago" icono="crown" abierto={abierta === 'pago'} onToggle={() => alternar('pago')}>
+      <Acordeon titulo="Pagar la cuota" icono="crown" abierto={abierta === 'pago'} onToggle={() => alternar('pago')}>
         <InformarPago />
       </Acordeon>
 
