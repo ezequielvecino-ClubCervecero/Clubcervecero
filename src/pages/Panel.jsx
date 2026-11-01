@@ -2,6 +2,7 @@
 // El administrador ve ademas las pestañas Cuotas y Ajustes y roles.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { MiUsuarioPropio } from '../MiUsuario'
 import { Icon, Msg, Navegacion, Categoria, CATS, fmt, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
 import MasVendidos from '../MasVendidos'
@@ -310,6 +311,8 @@ function Ajustes({ socios, recargar }) {
   const [r, setR] = useState({ socio: '', rol: 'personal' })
   const [msgA, setMsgA] = useState(null)
   const [msgR, setMsgR] = useState(null)
+  const [u, setU] = useState({ socio: '', usuario: '' })
+  const [msgU, setMsgU] = useState(null)
 
   async function ajustar(e) {
     e.preventDefault()
@@ -331,8 +334,34 @@ function Ajustes({ socios, recargar }) {
     recargar()
   }
 
+  async function cambiarUsuario(e) {
+    e.preventDefault()
+    setMsgU(null)
+    const { error } = await supabase.rpc('admin_cambiar_usuario', { p_id: u.socio, p_usuario: u.usuario })
+    if (error) return setMsgU({ tipo: 'error', texto: error.message })
+    setMsgU({ tipo: 'ok', texto: 'Usuario actualizado.' })
+    setU({ socio: '', usuario: '' })
+  }
+
   return (
     <>
+      <div className="card">
+        <h3>Mi usuario</h3>
+        <MiUsuarioPropio />
+      </div>
+      <form className="card" onSubmit={cambiarUsuario}>
+        <h3>Usuario de un socio</h3>
+        <p className="mu">Cambiá el nombre de usuario con el que un socio ingresa (por ejemplo si eligió uno que no corresponde).</p>
+        <label htmlFor="u-socio">Socio</label>
+        <select id="u-socio" value={u.socio} onChange={(e) => setU({ ...u, socio: e.target.value })} required>
+          <option value="">Elegí un socio</option>
+          {socios.map((s) => <option key={s.id} value={s.id}>{etiqueta(s)}</option>)}
+        </select>
+        <label htmlFor="u-usr">Usuario nuevo</label>
+        <input id="u-usr" autoCapitalize="none" maxLength={20} value={u.usuario} onChange={(e) => setU({ ...u, usuario: e.target.value })} required />
+        <button className="btn pri" style={{ marginTop: 16 }}>Cambiar usuario</button>
+        <Msg m={msgU} />
+      </form>
       <form className="card" onSubmit={ajustar}>
         <h3>Ajustar puntos</h3>
         <p className="mu">Usá un número positivo para sumar y uno negativo para restar.</p>

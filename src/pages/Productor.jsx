@@ -1,6 +1,7 @@
 // Pantalla del productor: inicio, pedidos, productos, rendición mensual y datos de su cervecería.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import MiUsuario from '../MiUsuario'
 import { Msg, Navegacion, fmt, fechaHora, cap, imprimirTicket } from '../ui'
 import { subirImagenProducto } from '../imagenes'
 import TiendaControl from '../TiendaControl'
@@ -476,6 +477,10 @@ function Datos({ perfil, datos, onGuardado }) {
         <button className="btn pri" style={{ marginTop: 16 }}>Guardar</button>
         <Msg m={msg} />
       </form>
+      <div className="card">
+        <h3>Mi usuario</h3>
+        <MiUsuario actual={perfil.usuario} />
+      </div>
     </>
   )
 }

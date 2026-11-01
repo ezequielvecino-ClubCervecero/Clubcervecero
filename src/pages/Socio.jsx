@@ -5,6 +5,7 @@ import { Icon, Coin, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, fechaHora,
 import Tienda from './Tienda'
 import Puesto from '../Puesto'
 import { MisDirecciones } from '../Direcciones'
+import MiUsuario from '../MiUsuario'
 
 const COSTO_TRANSFERENCIA = 0.5
 const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
@@ -49,6 +50,7 @@ function Inicio({ perfil }) {
         <h2 style={{ margin: 0 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
+        {p.usuario && <p className="mu">Usuario: {p.usuario}</p>}
         {p.apodo && <p className="mu">Apodo: {p.apodo}</p>}
         <p className="mu" style={{ marginTop: 14 }}>Saldo disponible</p>
         <div className="bal num"><Coin />{fmt(saldo)}</div>
@@ -209,6 +211,10 @@ function Perfil({ perfil }) {
 
       <Acordeon titulo="Mis datos" icono="crown" abierto={abierta === 'datos'} onToggle={() => alternar('datos')}>
         <MisDatos p={p} onListo={cargar} />
+      </Acordeon>
+
+      <Acordeon titulo="Mi usuario" icono="hop" abierto={abierta === 'usuario'} onToggle={() => alternar('usuario')}>
+        <MiUsuario actual={p.usuario} onListo={cargar} />
       </Acordeon>
 
       <Acordeon titulo="Mis direcciones" icono="pint" abierto={abierta === 'dirs'} onToggle={() => alternar('dirs')}>
