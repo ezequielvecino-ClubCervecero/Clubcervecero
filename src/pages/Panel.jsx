@@ -762,7 +762,7 @@ export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria 
       <div><label htmlFor={id + '-p'}>Precio ($)</label><input id={id + '-p'} type="number" min="0" step="1" value={r.precio_pesos} onChange={(e) => set('precio_pesos', e.target.value)} required /></div>
       <div>
         <label>Precio en puntos</label>
-        <p className="mu">{r.precio_puntos != null ? fmt(r.precio_puntos) + ' pts (automático)' : 'Automático: precio en pesos ÷ valor del punto del cliente'}</p>
+        <p className="mu">{r.precio_puntos != null ? fmt(r.precio_puntos) + ' pts (automático)' : 'Automático: 10% menos que en pesos, con el valor del punto del cliente'}</p>
       </div>
       <div><label htmlFor={id + '-st'}>Stock (unidades)</label><input id={id + '-st'} type="number" min="0" step="1" value={r.stock} onChange={(e) => set('stock', e.target.value)} required /></div>
       <div style={{ gridColumn: '1 / -1' }}>
@@ -1274,7 +1274,7 @@ const GRUPOS_PUNTOS = [
   },
   {
     titulo: 'Valor del punto',
-    nota: 'Hay dos valores. El del cliente define el precio en puntos de cada producto (precio en pesos ÷ este valor). El del productor y el club se usa en las rendiciones, en la contabilidad y para valuar los puntos regalados. Si el del club es menor, pagar con puntos le sale más barato al cliente. El valor del club queda guardado en cada pedido pagado con puntos: si lo cambiás, no afecta lo ya vendido.',
+    nota: 'Hay dos valores. El del cliente define el precio en puntos de cada producto: precio en pesos × 90% ÷ este valor, o sea un 10% de descuento fijo al pagar con puntos (ej. $4.000 con el punto a $1.000 = 3,60 puntos). El del productor y el club (ej. $900) se usa solo en las rendiciones, en la contabilidad y para valuar los puntos regalados. El valor del club queda guardado en cada pedido pagado con puntos: si lo cambiás, no afecta lo ya vendido.',
     campos: [
       ['valor_punto_cliente', 'Valor del punto para el cliente ($)', 'Con este valor se calcula el precio en puntos de los productos', 1000000, 0.01],
       ['valor_punto', 'Valor del punto para el productor y el club ($)', 'Se usa en rendiciones y en la contabilidad del club', 1000000, 0.01],
@@ -1338,9 +1338,7 @@ function PuntosAdmin() {
           </div>
           {g.titulo === 'Valor del punto' && Number(v.valor_punto_cliente) > 0 && (
             <p className="mu" style={{ marginTop: 8 }}>
-              {Number(v.valor_punto) > Number(v.valor_punto_cliente)
-                ? 'Atención: el valor del club es mayor que el del cliente.'
-                : 'Con estos valores, pagar con puntos le sale al cliente un ' + fmt((1 - Number(v.valor_punto) / Number(v.valor_punto_cliente)) * 100) + '% más barato que en pesos.'}
+              Ejemplo: un producto de $4.000 sale {fmt(4000 * 0.9 / Number(v.valor_punto_cliente))} puntos.
             </p>
           )}
         </div>

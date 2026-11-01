@@ -329,7 +329,7 @@ function Productos({ perfil, datos, oculto }) {
     <>
       <h2 style={{ marginTop: 6 }}>Mis productos</h2>
       {oculto && <p className="msg error">Tus productos están ocultos para los socios por la rendición vencida. Mirá Inicio.</p>}
-      <p className="mu">El precio en puntos se calcula solo: es el precio en pesos dividido por el valor del punto para el cliente (que fija el administrador).</p>
+      <p className="mu">El precio en puntos se calcula solo: es el precio en pesos con un 10% de descuento, pasado a puntos con el valor del punto para el cliente (que fija el administrador).</p>
       {sinNombre
         ? <p className="msg error">Primero cargá el nombre de tu cervecería en Datos: es el que ven los socios en cada producto.</p>
         : (
@@ -358,6 +358,36 @@ function Productos({ perfil, datos, oculto }) {
   )
 }
 
+// Cuánto se queda la aplicación este mes, separado entre ventas en pesos/transferencia y ventas en puntos.
+function QuedaApp({ inicio }) {
+  const pct = Number(inicio.porcentaje) || 0
+  const pesosV = Number(inicio.efectivo_mes) || 0
+  const ptsV = Number(inicio.puntos_mes_pesos) || 0
+  const comPesos = pesosV * pct / 100
+  const comPts = ptsV * pct / 100
+  const Parte = ({ titulo, vendido, com, nota }) => (
+    <div style={{ marginTop: 10 }}>
+      <b>{titulo}</b>
+      <div className="row"><span>Vendiste</span><b>{pesos(vendido)}</b></div>
+      <div className="row"><span>La app se queda ({pct}%)</span><b style={{ color: 'var(--am)' }}>{pesos(com)}</b></div>
+      <div className="row"><span>Te queda a vos</span><b className="pts">{pesos(vendido - com)}</b></div>
+      {nota && <p className="mu">{nota}</p>}
+    </div>
+  )
+  return (
+    <div className="card">
+      <div className="row"><h3>Cuánto se queda la app este mes</h3></div>
+      <Parte titulo="Ventas en pesos o transferencia" vendido={pesosV} com={comPesos} />
+      <Parte titulo="Ventas en puntos" vendido={ptsV} com={comPts}
+        nota={fmt(inicio.puntos_mes) + ' puntos, a ' + pesos(inicio.valor_punto) + ' cada uno. El club te los paga en la rendición.'} />
+      <hr style={{ borderColor: 'var(--line, #333)', margin: '12px 0' }} />
+      <div className="row"><b>Total que se queda la app</b><b style={{ color: 'var(--am)' }}>{pesos(comPesos + comPts)}</b></div>
+      <div className="row"><b>Total que te queda</b><b className="pts">{pesos(pesosV + ptsV - comPesos - comPts)}</b></div>
+      <p className="mu">Cuentan los pedidos entregados del mes en curso. Es un estimado hasta que cierra el mes.</p>
+    </div>
+  )
+}
+
 // Rendición mensual: porcentaje pactado sobre el ingreso, menos el valor de los puntos obtenidos.
 function Cuenta({ perfil, inicio, datos }) {
   const [tickets, setTickets] = useState(null)
@@ -373,6 +403,8 @@ function Cuenta({ perfil, inicio, datos }) {
         Cada mes se hace tu rendición: el {inicio ? inicio.porcentaje : '5'}% de lo que facturaste (pesos más puntos), menos lo que valen los puntos que obtuviste.
         Si da positivo, lo pagás vos; si da negativo, te paga el club. Los puntos no se canjean aparte: se descuentan acá.
       </p>
+      {inicio && <QuedaApp inicio={inicio} />}
+      <h3 style={{ marginTop: 14 }}>Rendiciones</h3>
       {tickets === null && <p className="mu">Cargando...</p>}
       {tickets && tickets.length === 0 && <p className="mu">Todavía no tenés rendiciones. La primera se genera el día 1 del mes siguiente.</p>}
       {(tickets || []).map((t) => {
