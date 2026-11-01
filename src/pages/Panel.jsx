@@ -1270,14 +1270,17 @@ const GRUPOS_PUNTOS = [
   {
     titulo: 'Cuota de los socios',
     nota: 'Es una sola para todos. Al confirmar un pago se suma en Facturación con el monto de ese momento y el socio pasa a Miembro Gold hasta que se le vence la cuota.',
-    campos: [['monto_cuota', 'Monto de la cuota mensual ($)', 'Pesos por mes', 10000000, 1]],
+    campos: [
+      ['monto_cuota', 'Monto de la cuota mensual ($)', 'Pesos por mes', 10000000, 1],
+      ['puntos_regalo_cuota', 'Puntos que regala cada cuota', 'Se cargan al confirmar el pago', 1000, 0.5],
+    ],
   },
   {
     titulo: 'Valor del punto',
-    nota: 'Hay dos valores. El del cliente define el precio en puntos de cada producto: precio en pesos × 90% ÷ este valor, o sea un 10% de descuento fijo al pagar con puntos (ej. $4.000 con el punto a $1.000 = 3,60 puntos). El del productor y el club (ej. $900) se usa solo en las rendiciones, en la contabilidad y para valuar los puntos regalados. El valor del club queda guardado en cada pedido pagado con puntos: si lo cambiás, no afecta lo ya vendido.',
+    nota: 'El valor del punto se calcula solo: cuota ÷ puntos que regala la cuota (ej. $15.000 ÷ 15 = $1.000). El del productor y el club es el 90% de ese valor (ej. $900) y se usa en las rendiciones, en la contabilidad y para valuar los puntos regalados. Precio en puntos de cada producto = precio en pesos × 90% ÷ valor del cliente, o sea un 10% de descuento fijo al pagar con puntos (ej. $4.000 = 3,60 puntos). El valor del club queda guardado en cada pedido pagado con puntos: si cambia, no afecta lo ya vendido.',
     campos: [
-      ['valor_punto_cliente', 'Valor del punto para el cliente ($)', 'Con este valor se calcula el precio en puntos de los productos', 1000000, 0.01],
-      ['valor_punto', 'Valor del punto para el productor y el club ($)', 'Se usa en rendiciones y en la contabilidad del club', 1000000, 0.01],
+      ['valor_punto_cliente', 'Valor del punto para el cliente ($)', 'Automático: cuota ÷ puntos de regalo', 1000000, 0.01],
+      ['valor_punto', 'Valor del punto para el productor y el club ($)', 'Automático: 90% del valor del cliente', 1000000, 0.01],
     ],
   },
   {
@@ -1289,33 +1292,38 @@ const GRUPOS_PUNTOS = [
     ],
   },
 ]
+// Se calculan solos en la base a partir de la cuota y los puntos de regalo.
+const AUTOMATICOS = ['valor_punto_cliente', 'valor_punto']
 const TODOS_PUNTOS = GRUPOS_PUNTOS.flatMap((g) => g.campos)
 
 function PuntosAdmin() {
   const [v, setV] = useState(null)
   const [msg, setMsg] = useState(null)
 
-  useEffect(() => {
-    supabase.from('configuracion').select(TODOS_PUNTOS.map((c) => c[0]).join(',')).eq('id', 1).single()
+  function cargar() {
+    return supabase.from('configuracion').select(TODOS_PUNTOS.map((c) => c[0]).join(',')).eq('id', 1).single()
       .then(({ data, error }) => {
         if (error) return setMsg({ tipo: 'error', texto: error.message })
         setV(Object.fromEntries(TODOS_PUNTOS.map(([k]) => [k, String(data[k])])))
       })
-  }, [])
+  }
+  useEffect(() => { cargar() }, [])
 
   async function guardar(e) {
     e.preventDefault()
     setMsg(null)
     const nuevo = {}
     for (const [k, titulo, , max] of TODOS_PUNTOS) {
+      if (AUTOMATICOS.includes(k)) continue
       const n = Number(v[k])
-      if (v[k] === '' || !Number.isFinite(n) || n < 0 || n > max) {
+      if (v[k] === '' || !Number.isFinite(n) || n < 0 || n > max || (k === 'puntos_regalo_cuota' && n <= 0)) {
         return setMsg({ tipo: 'error', texto: '"' + titulo + '": poné un número entre 0 y ' + max + '.' })
       }
       nuevo[k] = k === 'membresia_dias_gracia' ? Math.round(n) : Math.round(n * 100) / 100
     }
     const { error } = await supabase.from('configuracion').update(nuevo).eq('id', 1)
     setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado. Vale desde ahora; lo ya acreditado o cobrado no cambia.' })
+    if (!error) cargar()
   }
 
   if (!v) return <><Msg m={msg} /><p className="mu">Cargando...</p></>
@@ -1331,6 +1339,7 @@ function PuntosAdmin() {
               <div key={k}>
                 <label htmlFor={'pt-' + k}>{titulo}</label>
                 <input id={'pt-' + k} type="number" min="0" max={max} step={paso} value={v[k]}
+                  readOnly={AUTOMATICOS.includes(k)} style={AUTOMATICOS.includes(k) ? { opacity: 0.7 } : undefined}
                   onChange={(e) => setV({ ...v, [k]: e.target.value })} required />
                 <p className="mu">{ayuda}</p>
               </div>
