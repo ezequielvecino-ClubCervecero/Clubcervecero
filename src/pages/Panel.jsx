@@ -1356,9 +1356,9 @@ const ROJO = '#f87171'
 
 function FilaNum({ a, b, color, fuerte }) {
   return (
-    <div className="row" style={{ marginTop: 4 }}>
+    <div className="row" style={{ marginTop: 4, flexWrap: 'nowrap', alignItems: 'flex-start' }}>
       <span className={fuerte ? undefined : 'mu'}>{a}</span>
-      <b style={color ? { color } : undefined}>{b}</b>
+      <b style={{ whiteSpace: 'nowrap', ...(color ? { color } : {}) }}>{b}</b>
     </div>
   )
 }
@@ -1553,6 +1553,7 @@ function ProductoresAdmin({ club }) {
   const [lista, setLista] = useState(null)
   const [fact, setFact] = useState({})
   const [rends, setRends] = useState([])
+  const [clubVentas, setClubVentas] = useState(null)
   const [ventas, setVentas] = useState({})
   const [abierto, setAbierto] = useState(null)
   const [tiendaDe, setTiendaDe] = useState(null)
@@ -1562,12 +1563,23 @@ function ProductoresAdmin({ club }) {
   const cargar = useCallback(async () => {
     const desde = new Date(Date.UTC(per.a, per.m, 1, 3)).toISOString()
     const hasta = new Date(Date.UTC(per.a, per.m + 1, 1, 3)).toISOString()
-    const [r, f, d] = await Promise.all([
+    const [r, f, d, cv, cf] = await Promise.all([
       supabase.rpc('resumen_productores'),
       supabase.rpc('facturacion_productores', { p_desde: desde, p_hasta: hasta }),
       supabase.from('rendiciones_productor').select('*, productores(cerveceria)').eq('estado', 'pendiente').order('periodo'),
+      supabase.from('pedidos').select('total_pesos, total_puntos, pago, valor_punto')
+        .eq('estado', 'confirmado').is('productor_id', null).gte('resuelto_en', desde).lt('resuelto_en', hasta),
+      supabase.from('configuracion').select('valor_punto').eq('id', 1).single(),
     ])
-    const err = r.error || f.error || d.error
+    const err = r.error || f.error || d.error || cv.error || cf.error
+    const vp = Number((cf.data && cf.data.valor_punto) || 0)
+    const filasClub = cv.data || []
+    setClubVentas({
+      cant: filasClub.length,
+      pesos: filasClub.filter((o) => o.pago !== 'puntos').reduce((a, o) => a + Number(o.total_pesos), 0),
+      pts: filasClub.filter((o) => o.pago === 'puntos').reduce((a, o) => a + Number(o.total_puntos), 0),
+      ptsPesos: filasClub.filter((o) => o.pago === 'puntos').reduce((a, o) => a + Number(o.total_puntos) * Number(o.valor_punto ?? vp), 0),
+    })
     if (err) setMsg({ tipo: 'error', texto: err.message })
     setLista(r.data || [])
     setFact(Object.fromEntries((f.data || []).map((x) => [x.id, x])))
@@ -1675,6 +1687,20 @@ function ProductoresAdmin({ club }) {
           <button type="button" className="btn" aria-label="Mes siguiente" disabled={esActual} onClick={() => mover(1)}>▶</button>
         </div>
         <p className="mu" style={{ marginTop: 8 }}>La facturación de cada productor se cuenta en el mes en que marca el pedido como entregado.</p>
+      </div>
+
+      <div className="card">
+        <div className="row"><h3>Tienda del club</h3><span className="pill cel">Venta propia</span></div>
+        {clubVentas && (
+          <div style={{ marginTop: 8 }}>
+            <p className="mu" style={{ marginBottom: 4 }}>Facturación de {mesLargo(per.a, per.m)} ({clubVentas.cant} pedidos entregados)</p>
+            <p>Cobrado en pesos: <b>{pesos(clubVentas.pesos)}</b></p>
+            <p>Puntos: <b className="pts">{fmt(clubVentas.pts)}</b> (equivalen a {pesos(clubVentas.ptsPesos)})</p>
+            <p>Ingreso total del mes: <b>{pesos(clubVentas.pesos + clubVentas.ptsPesos)}</b></p>
+          </div>
+        )}
+        <div style={{ marginTop: 12 }}><TiendaControl titulo="Abrir y cerrar" propia={false} /></div>
+        <p className="mu" style={{ marginTop: 8 }}>Los pedidos del club se responden en Cobros. La tienda también se maneja desde ahí.</p>
       </div>
 
       {lista.length === 0 && (
