@@ -268,6 +268,7 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
 const datosProducto = (r) => ({
   seccion: r.seccion, nombre: r.nombre.trim(),
   formato: r.formato && r.formato.trim() ? r.formato.trim() : null,
+  formato_id: r.formato_id || null,
   descripcion: r.descripcion && r.descripcion.trim() ? r.descripcion.trim() : null,
   precio_pesos: Number(r.precio_pesos),
   stock: Math.max(0, Math.floor(Number(r.stock || 0))),
@@ -275,21 +276,27 @@ const datosProducto = (r) => ({
 })
 
 function Productos({ perfil, datos, oculto }) {
-  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
+  const vacio = { seccion: 'cervezas', nombre: '', formato: '', formato_id: null, descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
+  const [formatos, setFormatos] = useState([])
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
   const [msg, setMsg] = useState(null)
 
   const cargar = useCallback(async () => {
-    const [s, p] = await Promise.all([
+    const [s, p, f] = await Promise.all([
       supabase.from('tienda_secciones').select('*').order('orden'),
       supabase.from('tienda_productos').select('*').eq('productor_id', perfil.id).order('nombre'),
+      supabase.from('tienda_formatos').select('*').order('id'),
     ])
     setSecciones(s.data || [])
     setLista(p.data || [])
+    setFormatos(f.data || [])
   }, [perfil.id])
   useEffect(() => { cargar() }, [cargar])
+  useEffect(() => {
+    if (secciones.length && !secciones.some((s) => s.id === nuevo.seccion)) setNuevo((n) => ({ ...n, seccion: secciones[0].id }))
+  }, [secciones, nuevo.seccion])
 
   const editar = (id, campo, valor) => setLista((l) => l.map((r) => (r.id === id ? { ...r, [campo]: valor } : r)))
 
@@ -334,7 +341,7 @@ function Productos({ perfil, datos, oculto }) {
         : (
           <form className="card" onSubmit={agregar}>
             <h3>Agregar producto</h3>
-            <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} id="nuevo"
+            <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} formatos={formatos} id="nuevo"
               onImagen={(f) => cambiarImagen(f, (url) => setNuevo((n) => ({ ...n, imagen_url: url })))} />
             <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
           </form>
@@ -343,7 +350,7 @@ function Productos({ perfil, datos, oculto }) {
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
         <div key={r.id} className="card" style={{ opacity: r.activo ? 1 : 0.6 }}>
-          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} id={r.id}
+          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} formatos={formatos} id={r.id}
             onImagen={(f) => cambiarImagen(f, (url) => editar(r.id, 'imagen_url', url))} />
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" className={'chip' + (r.activo ? ' on' : '')} onClick={() => editar(r.id, 'activo', !r.activo)}>

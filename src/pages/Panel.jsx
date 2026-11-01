@@ -815,7 +815,7 @@ function Cobros({ onCambio, esAdmin }) {
   )
 }
 
-export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria }) {
+export function CamposProducto({ r, set, secciones, formatos = [], id, onImagen, conCerveceria }) {
   return (
     <div className="filtros">
       <div><label htmlFor={id + '-n'}>Nombre</label><input id={id + '-n'} value={r.nombre} onChange={(e) => set('nombre', e.target.value)} required /></div>
@@ -826,7 +826,14 @@ export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria 
           {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
         </select>
       </div>
-      <div><label htmlFor={id + '-f'}>Formato</label><input id={id + '-f'} placeholder="1 litro" value={r.formato ?? ''} onChange={(e) => set('formato', e.target.value)} /></div>
+      <div>
+        <label htmlFor={id + '-fi'}>Formato</label>
+        <select id={id + '-fi'} value={r.formato_id ?? ''} onChange={(e) => set('formato_id', e.target.value ? Number(e.target.value) : null)}>
+          <option value="">Sin formato</option>
+          {formatos.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+        </select>
+      </div>
+      <div><label htmlFor={id + '-f'}>Contenido (opcional)</label><input id={id + '-f'} placeholder="1 litro" value={r.formato ?? ''} onChange={(e) => set('formato', e.target.value)} /></div>
       <div><label htmlFor={id + '-p'}>Precio ($)</label><input id={id + '-p'} type="number" min="0" step="1" value={r.precio_pesos} onChange={(e) => set('precio_pesos', e.target.value)} required /></div>
       <div>
         <label>Precio en puntos</label>
@@ -847,27 +854,130 @@ export function CamposProducto({ r, set, secciones, id, onImagen, conCerveceria 
   )
 }
 
+// Secciones de la tienda: crear, renombrar, ordenar, ocultar y borrar (solo si están vacías).
+function SeccionesAdmin({ secciones, productos, recargar }) {
+  const [nombres, setNombres] = useState({})
+  const [nueva, setNueva] = useState('')
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => { setNombres(Object.fromEntries(secciones.map((s) => [s.id, s.nombre]))) }, [secciones])
+
+  async function accion(promesa, ok) {
+    setMsg(null)
+    const { error } = await promesa
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    if (ok) setMsg({ tipo: 'ok', texto: ok })
+    recargar()
+  }
+  const cantidad = (id) => productos.filter((p) => p.seccion === id).length
+
+  return (
+    <div className="card">
+      <h3>Secciones de la tienda</h3>
+      <p className="mu">«Todos» es fija: va siempre primera y muestra todos los productos juntos. Las demás las podés renombrar, ordenar y ocultar. Solo se borra una sección sin productos; mientras tenga, ocultala.</p>
+      <div className="row" style={{ justifyContent: 'flex-start' }}><b>Todos</b><span className="mu">fija · siempre visible</span></div>
+      {secciones.map((s, i) => (
+        <div key={s.id} className="card" style={s.visible ? undefined : { opacity: 0.65 }}>
+          <input aria-label={'Nombre de la sección ' + s.nombre} maxLength={30} value={nombres[s.id] ?? s.nombre}
+            onChange={(e) => setNombres({ ...nombres, [s.id]: e.target.value })} />
+          <p className="mu">{cantidad(s.id)} {cantidad(s.id) === 1 ? 'producto' : 'productos'} del club</p>
+          <div className="row" style={{ marginTop: 8, justifyContent: 'flex-start' }}>
+            <button type="button" className="btn" disabled={i === 0} aria-label="Subir" onClick={() => accion(supabase.rpc('mover_seccion', { p_id: s.id, p_dir: -1 }))}>↑</button>
+            <button type="button" className="btn" disabled={i === secciones.length - 1} aria-label="Bajar" onClick={() => accion(supabase.rpc('mover_seccion', { p_id: s.id, p_dir: 1 }))}>↓</button>
+            <button type="button" className="btn" disabled={(nombres[s.id] ?? s.nombre).trim() === s.nombre}
+              onClick={() => accion(supabase.rpc('renombrar_seccion', { p_id: s.id, p_nombre: nombres[s.id] }), 'Nombre guardado.')}>Guardar nombre</button>
+            <button type="button" className={'chip' + (s.visible ? ' on' : '')}
+              onClick={() => accion(supabase.from('tienda_secciones').update({ visible: !s.visible }).eq('id', s.id))}>
+              {s.visible ? 'Visible' : 'Oculta'}
+            </button>
+            <button type="button" className="btn" onClick={() => {
+              if (window.confirm('¿Borrar la sección «' + s.nombre + '»?')) accion(supabase.rpc('borrar_seccion', { p_id: s.id }), 'Sección borrada.')
+            }}>Borrar</button>
+          </div>
+        </div>
+      ))}
+      <form className="row" style={{ marginTop: 12, flexWrap: 'nowrap' }} onSubmit={(e) => {
+        e.preventDefault()
+        accion(supabase.rpc('crear_seccion', { p_nombre: nueva }), 'Sección creada.').then(() => setNueva(''))
+      }}>
+        <input aria-label="Nueva sección" placeholder="Nueva sección (por ejemplo Merchandising)" maxLength={30} value={nueva} onChange={(e) => setNueva(e.target.value)} required />
+        <button className="btn pri">Agregar</button>
+      </form>
+      <Msg m={msg} />
+    </div>
+  )
+}
+
+// Lista fija de formatos (botella, lata, growler, barril...) que eligen el administrador y los productores.
+function FormatosAdmin({ formatos, recargar }) {
+  const [nombres, setNombres] = useState({})
+  const [nuevo, setNuevo] = useState('')
+  const [msg, setMsg] = useState(null)
+  useEffect(() => { setNombres(Object.fromEntries(formatos.map((f) => [f.id, f.nombre]))) }, [formatos])
+
+  async function accion(promesa, ok) {
+    setMsg(null)
+    const { error } = await promesa
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    if (ok) setMsg({ tipo: 'ok', texto: ok })
+    recargar()
+  }
+
+  return (
+    <div className="card">
+      <h3>Formatos</h3>
+      <p className="mu">Lista fija: al cargar un producto se elige uno de acá. Los socios lo ven en cada producto y pueden filtrar por formato.</p>
+      {formatos.map((f) => (
+        <div key={f.id} className="row" style={{ marginTop: 8, flexWrap: 'nowrap' }}>
+          <input aria-label={'Formato ' + f.nombre} maxLength={30} value={nombres[f.id] ?? f.nombre} onChange={(e) => setNombres({ ...nombres, [f.id]: e.target.value })} />
+          <button type="button" className="btn" disabled={(nombres[f.id] ?? f.nombre).trim() === f.nombre}
+            onClick={() => accion(supabase.rpc('renombrar_formato', { p_id: f.id, p_nombre: nombres[f.id] }), 'Formato guardado.')}>Guardar</button>
+          <button type="button" className="btn" onClick={() => {
+            if (window.confirm('¿Borrar el formato «' + f.nombre + '»?')) accion(supabase.rpc('borrar_formato', { p_id: f.id }), 'Formato borrado.')
+          }}>Borrar</button>
+        </div>
+      ))}
+      <form className="row" style={{ marginTop: 12, flexWrap: 'nowrap' }} onSubmit={(e) => {
+        e.preventDefault()
+        accion(supabase.rpc('crear_formato', { p_nombre: nuevo }), 'Formato agregado.').then(() => setNuevo(''))
+      }}>
+        <input aria-label="Nuevo formato" placeholder="Nuevo formato (por ejemplo Botella 330)" maxLength={30} value={nuevo} onChange={(e) => setNuevo(e.target.value)} required />
+        <button className="btn pri">Agregar</button>
+      </form>
+      <Msg m={msg} />
+    </div>
+  )
+}
+
 function TiendaAdmin() {
-  const vacio = { seccion: 'cervezas', nombre: '', formato: '', descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
+  const vacio = { seccion: 'cervezas', nombre: '', formato: '', formato_id: null, descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
+  const [formatos, setFormatos] = useState([])
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
   const [msg, setMsg] = useState(null)
 
   const cargar = useCallback(async () => {
-    const [s, p] = await Promise.all([
+    const [s, p, f] = await Promise.all([
       supabase.from('tienda_secciones').select('*').order('orden'),
       supabase.from('tienda_productos').select('*').is('productor_id', null).order('seccion').order('nombre'),
+      supabase.from('tienda_formatos').select('*').order('id'),
     ])
     setSecciones(s.data || [])
     setLista(p.data || [])
+    setFormatos(f.data || [])
   }, [])
   useEffect(() => { cargar() }, [cargar])
+  // Si la sección por defecto ya no existe (se borró), se usa la primera.
+  useEffect(() => {
+    if (secciones.length && !secciones.some((s) => s.id === nuevo.seccion)) setNuevo((n) => ({ ...n, seccion: secciones[0].id }))
+  }, [secciones, nuevo.seccion])
 
   const editar = (id, campo, valor) => setLista((l) => l.map((r) => (r.id === id ? { ...r, [campo]: valor } : r)))
   const datos = (r) => ({
     seccion: r.seccion, nombre: r.nombre.trim(),
     formato: r.formato && r.formato.trim() ? r.formato.trim() : null,
+    formato_id: r.formato_id || null,
     descripcion: r.descripcion && r.descripcion.trim() ? r.descripcion.trim() : null,
     precio_pesos: Number(r.precio_pesos),
     stock: Math.max(0, Math.floor(Number(r.stock || 0))),
@@ -883,13 +993,6 @@ function TiendaAdmin() {
     } catch (e) {
       setMsg({ tipo: 'error', texto: e.message })
     }
-  }
-
-  async function alternarSeccion(s) {
-    setMsg(null)
-    const { error } = await supabase.from('tienda_secciones').update({ visible: !s.visible }).eq('id', s.id)
-    if (error) return setMsg({ tipo: 'error', texto: error.message })
-    cargar()
   }
 
   async function guardar(r) {
@@ -910,17 +1013,8 @@ function TiendaAdmin() {
 
   return (
     <>
-      <div className="card">
-        <h3>Secciones de la tienda</h3>
-        <p className="mu">Elegí cuáles ven los socios.</p>
-        <div className="chips">
-          {secciones.map((s) => (
-            <button key={s.id} type="button" className={'chip' + (s.visible ? ' on' : '')} onClick={() => alternarSeccion(s)}>
-              {s.nombre}: {s.visible ? 'visible' : 'oculta'}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SeccionesAdmin secciones={secciones} productos={lista} recargar={cargar} />
+      <FormatosAdmin formatos={formatos} recargar={cargar} />
 
       <div className="card">
         <h3>Más vendidos</h3>
@@ -929,7 +1023,7 @@ function TiendaAdmin() {
 
       <form className="card" onSubmit={agregar}>
         <h3>Agregar producto</h3>
-        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} id="nuevo"
+        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} formatos={formatos} id="nuevo"
           onImagen={(f) => cambiarImagen(f, (url) => setNuevo((n) => ({ ...n, imagen_url: url })))} />
         <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
       </form>
@@ -939,7 +1033,7 @@ function TiendaAdmin() {
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
         <div key={r.id} className="card" style={{ opacity: r.activo ? 1 : 0.6 }}>
-          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} id={r.id}
+          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} formatos={formatos} id={r.id}
             onImagen={(f) => cambiarImagen(f, (url) => editar(r.id, 'imagen_url', url))} />
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" className={'chip' + (r.activo ? ' on' : '')} onClick={() => editar(r.id, 'activo', !r.activo)}>

@@ -1,9 +1,8 @@
 // Tienda del socio: secciones, carrito, pedido y mensaje de WhatsApp.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
 import MasVendidos from '../MasVendidos'
-import { cuando } from '../TiendaControl'
 import Reloj from '../Reloj'
 import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
 
@@ -38,7 +37,9 @@ export default function Tienda({ perfil }) {
   const [productos, setProductos] = useState([])
   const [config, setConfig] = useState({})
   const [saldo, setSaldo] = useState(0)
-  const [seccion, setSeccion] = useState(null)
+  const [seccion, setSeccion] = useState('todos')
+  const [formatoSel, setFormatoSel] = useState(null)
+  const [orden, setOrden] = useState('seccion')
   const [carrito, setCarrito] = useState({})
   const [pago, setPago] = useState('efectivo')
   const [entrega, setEntrega] = useState('retiro')
@@ -57,7 +58,7 @@ export default function Tienda({ perfil }) {
   const cargar = useCallback(async () => {
     const [s, p, c, sd, et] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
-      supabase.from('tienda_productos').select('*, productores(cerveceria)').eq('activo', true).gt('stock', 0).order('nombre'),
+      supabase.from('tienda_productos').select('*, productores(cerveceria), tienda_formatos(nombre)').eq('activo', true).gt('stock', 0).order('nombre'),
       supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
       supabase.rpc('estado_tiendas'),
@@ -68,9 +69,14 @@ export default function Tienda({ perfil }) {
     setConfig(c.data || {})
     setSaldo(sd.data ?? 0)
     setTiendas(Object.fromEntries((et.data || []).map((t) => [t.productor_id || '', t])))
-    setSeccion((act) => (vis.some((v) => v.id === act) ? act : vis[0] ? vis[0].id : null))
+    setSeccion((act) => (act === 'todos' || vis.some((v) => v.id === act) ? act : 'todos'))
   }, [perfil.id])
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => {
+    cargar()
+    // Se refresca solo: si una tienda cierra o abre, sus productos salen o vuelven.
+    const t = setInterval(cargar, 60000)
+    return () => clearInterval(t)
+  }, [cargar])
 
   function cambiar(prod, delta) {
     setCarrito((c) => {
@@ -81,7 +87,20 @@ export default function Tienda({ perfil }) {
     })
   }
 
-  const lineas = productos.filter((p) => carrito[p.id]).map((p) => ({ ...p, cantidad: carrito[p.id] }))
+  // Los productos de una tienda cerrada no se muestran (y se sacan del carrito).
+  const abiertos = useMemo(() => productos.filter((p) => {
+    const t = tiendas[p.productor_id || '']
+    return !(t && t.abierta === false)
+  }), [productos, tiendas])
+  useEffect(() => {
+    setCarrito((c) => {
+      const ids = Object.keys(c)
+      if (ids.length === 0 || ids.every((id) => abiertos.some((p) => p.id === id))) return c
+      return Object.fromEntries(ids.filter((id) => abiertos.some((p) => p.id === id)).map((id) => [id, c[id]]))
+    })
+  }, [abiertos])
+
+  const lineas = abiertos.filter((p) => carrito[p.id]).map((p) => ({ ...p, cantidad: carrito[p.id] }))
   const totalPesos = lineas.reduce((a, l) => a + l.precio_pesos * l.cantidad, 0)
   const sePuedePuntos = lineas.length > 0 && lineas.every((l) => l.precio_puntos != null)
   const totalPuntos = sePuedePuntos ? lineas.reduce((a, l) => a + l.precio_puntos * l.cantidad, 0) : 0
@@ -150,46 +169,63 @@ export default function Tienda({ perfil }) {
     )
   }
 
-  const visibles = productos.filter((p) => p.seccion === seccion)
-  const tiendaDe = (p) => tiendas[p.productor_id || '']
-  const cerrada = (p) => !!tiendaDe(p) && tiendaDe(p).abierta === false
-  const avisoCierre = (p) => {
-    const t = tiendaDe(p)
-    return 'Tienda cerrada por ahora' + (t && t.proxima_apertura ? ': abre el ' + cuando(t.proxima_apertura) : '') + '.'
-  }
-  const clubCerrado = tiendas[''] && tiendas[''].abierta === false
-
+  const ordenSeccion = Object.fromEntries(secciones.map((x, k) => [x.id, k]))
+  const nombreSeccion = Object.fromEntries(secciones.map((x) => [x.id, x.nombre]))
+  const deSeccion = abiertos.filter((p) => seccion === 'todos' || p.seccion === seccion)
+  // Formatos que hay en lo que se está viendo (para el filtro).
+  const formatosHay = [...new Map(deSeccion.filter((p) => p.formato_id && p.tienda_formatos).map((p) => [p.formato_id, p.tienda_formatos.nombre])).entries()]
+  const filtrados = deSeccion.filter((p) => !formatoSel || p.formato_id === formatoSel)
+  const visibles = [...filtrados].sort((a, b) => {
+    if (orden === 'menor') return Number(a.precio_pesos) - Number(b.precio_pesos) || a.nombre.localeCompare(b.nombre)
+    if (orden === 'mayor') return Number(b.precio_pesos) - Number(a.precio_pesos) || a.nombre.localeCompare(b.nombre)
+    return (ordenSeccion[a.seccion] ?? 99) - (ordenSeccion[b.seccion] ?? 99) || a.nombre.localeCompare(b.nombre)
+  })
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
-      {clubCerrado && <p className="msg error">La tienda del club está cerrada por ahora{tiendas[''].proxima_apertura ? ': abre el ' + cuando(tiendas[''].proxima_apertura) : ''}. Podés mirar los productos, pero todavía no comprar.</p>}
       <Acordeon titulo="Más vendidos" icono="crown" abierto={masAbierto} onToggle={() => setMasAbierto((a) => !a)}>
         <MasVendidos />
       </Acordeon>
-      {secciones.length === 0 && <p className="mu">La tienda no tiene secciones disponibles por ahora.</p>}
       <div className="chips">
-        {secciones.map((s) => (
-          <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => setSeccion(s.id)}>{s.nombre}</button>
+        {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
+          <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null) }}>{s.nombre}</button>
         ))}
       </div>
-      {secciones.length > 0 && visibles.length === 0 && <p className="mu">No hay productos en esta sección.</p>}
+      {formatosHay.length > 0 && (
+        <div className="chips" aria-label="Filtrar por formato">
+          <button className={'chip' + (!formatoSel ? ' on' : '')} onClick={() => setFormatoSel(null)}>Todos los formatos</button>
+          {formatosHay.map(([id, nombre]) => (
+            <button key={id} className={'chip' + (formatoSel === id ? ' on' : '')} onClick={() => setFormatoSel(id)}>{nombre}</button>
+          ))}
+        </div>
+      )}
+      <div className="row" style={{ justifyContent: 'flex-start', gap: 8, margin: '8px 0' }}>
+        <label htmlFor="orden" className="mu" style={{ margin: 0 }}>Ordenar por</label>
+        <select id="orden" style={{ width: 'auto' }} value={orden} onChange={(e) => setOrden(e.target.value)}>
+          <option value="seccion">Sección</option>
+          <option value="menor">Precio: de menor a mayor</option>
+          <option value="mayor">Precio: de mayor a menor</option>
+        </select>
+      </div>
+      {visibles.length === 0 && <p className="mu">No hay productos para mostrar.</p>}
       {visibles.map((p) => (
         <div key={p.id} className="card row">
           <div className="row" style={{ flex: 1, minWidth: 190, flexWrap: 'nowrap', justifyContent: 'flex-start', gap: 12 }}>
             {p.imagen_url && <img className="prod-img" src={p.imagen_url} alt={p.nombre} loading="lazy" />}
             <div style={{ flex: 1, minWidth: 0 }}>
             <b>{p.nombre}</b>{p.formato ? <span className="mu"> · {p.formato}</span> : null}
+            {p.tienda_formatos && <span className="pill ok" style={{ marginLeft: 6 }}>{p.tienda_formatos.nombre}</span>}
+            {seccion === 'todos' && nombreSeccion[p.seccion] && <p className="mu">{nombreSeccion[p.seccion]}</p>}
             <p className="mu">Cervecería: <b>{cerveceriaDe(p, config.cerveceria_club)}</b></p>
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
             <p>{pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
             {p.stock <= 5 && <p className="mu">Quedan {p.stock}</p>}
-            {cerrada(p) && p.productor_id && <p className="msg error">{avisoCierre(p)}</p>}
             </div>
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn" aria-label={'Quitar uno de ' + p.nombre} disabled={!carrito[p.id]} onClick={() => cambiar(p, -1)}>−</button>
             <b aria-live="polite">{carrito[p.id] || 0}</b>
-            <button className="btn" aria-label={'Agregar uno de ' + p.nombre} disabled={cerrada(p) || (carrito[p.id] || 0) >= p.stock} onClick={() => cambiar(p, 1)}>+</button>
+            <button className="btn" aria-label={'Agregar uno de ' + p.nombre} disabled={(carrito[p.id] || 0) >= p.stock} onClick={() => cambiar(p, 1)}>+</button>
           </div>
         </div>
       ))}
