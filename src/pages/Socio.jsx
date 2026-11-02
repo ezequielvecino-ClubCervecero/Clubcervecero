@@ -7,6 +7,7 @@ import Puesto from '../Puesto'
 import { MisDirecciones } from '../Direcciones'
 import MiUsuario from '../MiUsuario'
 import { QrIdentificacion, EntradasSocio } from '../Entradas'
+import MasVendidos from '../MasVendidos'
 import Reloj from '../Reloj'
 
 const COSTO_TRANSFERENCIA = 0.5
@@ -50,7 +51,7 @@ function Inicio({ perfil }) {
     <>
       <div className="member" style={{ position: 'relative' }}>
         <QrIdentificacion codigo={p.codigo_qr} />
-        <h2 style={{ margin: 0, paddingRight: 124 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
+        <h2 style={{ margin: 0, paddingRight: 224 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.usuario && <p className="mu">Usuario: {p.usuario}</p>}
@@ -260,6 +261,7 @@ function Perfil({ perfil }) {
 }
 
 function Canjes({ perfil }) {
+  const [seccion, setSeccion] = useState('premios')
   const [saldo, setSaldo] = useState(0)
   const [recs, setRecs] = useState([])
   const [cat, setCat] = useState(CATS[0])
@@ -296,7 +298,7 @@ function Canjes({ perfil }) {
       <h2>Canjes</h2>
       <p className="mu">Saldo disponible: <b className="num">{fmt(saldo)}</b> puntos</p>
 
-      {cupon && (
+      {cupon && seccion === 'premios' && (
         <div className="card" style={{ borderColor: 'var(--am)' }}>
           <h3>Tu cupón de canje</h3>
           <div className="codigo">{cupon.codigo}</div>
@@ -313,8 +315,18 @@ function Canjes({ perfil }) {
         </div>
       )}
 
-      <EntradasSocio onSaldo={cargar} />
+      <div className="chips">
+        <button type="button" className={'chip' + (seccion === 'premios' ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', padding: '12px 10px', fontSize: 16 }} onClick={() => setSeccion('premios')}>
+          <Icon name="gift" size={18} />Premios
+        </button>
+        <button type="button" className={'chip' + (seccion === 'entradas' ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', padding: '12px 10px', fontSize: 16 }} onClick={() => setSeccion('entradas')}>
+          <Icon name="crown" size={18} />Entradas
+        </button>
+      </div>
 
+      {seccion === 'entradas' && <EntradasSocio onSaldo={cargar} />}
+
+      {seccion === 'premios' && <>
       <h2>Premios</h2>
       <div className="chips">
         {CATS.map((c) => (
@@ -335,6 +347,7 @@ function Canjes({ perfil }) {
           </button>
         </div>
       ))}
+      </>}
       <Msg m={msg} />
     </>
   )
@@ -364,6 +377,10 @@ function Club({ perfil }) {
       <Acordeon titulo={'Ranking de ' + MES} icono="crown" abierto={abierta === 'ranking'} onToggle={() => alternar('ranking')}>
         <Ranking p={p} />
       </Acordeon>
+
+      <Acordeon titulo="Más vendidos" icono="crown" abierto={abierta === 'vendidos'} onToggle={() => alternar('vendidos')}>
+        <MasVendidos />
+      </Acordeon>
     </>
   )
 }
@@ -391,12 +408,12 @@ function ProximoEvento() {
   const [msg, setMsg] = useState(null)
 
   const cargar = useCallback(async () => {
-    const { data } = await supabase.rpc('proximo_evento')
-    setEv(data && data[0] ? data[0] : null)
+    const { data } = await supabase.rpc('proximos_eventos')
+    setEv(data || [])
   }, [])
   useEffect(() => { cargar() }, [cargar])
 
-  async function alternar() {
+  async function alternar(ev) {
     setMsg(null)
     const { error } = await supabase.rpc('anotarse_evento', { p_evento: ev.id, p_anotar: !ev.anotado })
     if (error) return setMsg({ tipo: 'error', texto: error.message })
@@ -404,15 +421,25 @@ function ProximoEvento() {
   }
 
   if (ev === undefined) return null
-  if (ev === null) {
+  if (ev.length === 0) {
     return (
       <>
-        <h2>Próximo evento</h2>
-        <p className="mu">Todavía no hay un próximo evento.</p>
+        <h2>Próximos eventos</h2>
+        <p className="mu">Todavía no hay eventos programados.</p>
       </>
     )
   }
 
+  return (
+    <>
+      <h2>Próximos eventos</h2>
+      {ev.map((e) => <TarjetaEvento key={e.id} ev={e} alternar={() => alternar(e)} />)}
+      <Msg m={msg} />
+    </>
+  )
+}
+
+function TarjetaEvento({ ev, alternar }) {
   const f = new Date(ev.fecha)
   const dia = f.toLocaleDateString('es-AR', { day: 'numeric', timeZone: ZONA })
   const mes = f.toLocaleDateString('es-AR', { month: 'short', timeZone: ZONA }).replace('.', '')
@@ -422,7 +449,6 @@ function ProximoEvento() {
 
   return (
     <>
-      <h2>Próximo evento</h2>
       <div className="card row" style={{ flexWrap: 'nowrap', gap: 12 }}>
         <div className="fecha-evento"><b>{dia}</b><span>{mes}</span></div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -440,7 +466,6 @@ function ProximoEvento() {
         <p className="mu">Entrada: {'$ ' + fmt(ev.entrada_pesos)}{ev.entrada_puntos != null ? ' o ' + fmt(ev.entrada_puntos) + ' pts' : ''}. Comprala en la solapa Canjes.</p>
       )}
       {ev.entrada_pesos == null && ev.anotado && <p className="msg ok">Estás anotado en este evento.</p>}
-      <Msg m={msg} />
     </>
   )
 }

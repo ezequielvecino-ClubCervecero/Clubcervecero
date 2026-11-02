@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
-import MasVendidos from '../MasVendidos'
 import Reloj from '../Reloj'
 import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
 
@@ -52,7 +51,6 @@ export default function Tienda({ perfil }) {
   const [listo, setListo] = useState(null)
   const [abierta, setAbierta] = useState(false)
   const [version, setVersion] = useState(0)
-  const [masAbierto, setMasAbierto] = useState(false)
   const [tiendas, setTiendas] = useState({})
 
   const cargar = useCallback(async () => {
@@ -183,9 +181,6 @@ export default function Tienda({ perfil }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
-      <Acordeon titulo="Más vendidos" icono="crown" abierto={masAbierto} onToggle={() => setMasAbierto((a) => !a)}>
-        <MasVendidos />
-      </Acordeon>
       <div className="chips">
         {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
           <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null) }}>{s.nombre}</button>
@@ -201,7 +196,7 @@ export default function Tienda({ perfil }) {
       )}
       <div className="row" style={{ justifyContent: 'flex-start', gap: 8, margin: '8px 0' }}>
         <label htmlFor="orden" className="mu" style={{ margin: 0 }}>Ordenar por</label>
-        <select id="orden" style={{ width: 'auto' }} value={orden} onChange={(e) => setOrden(e.target.value)}>
+        <select id="orden" style={{ flex: 1, width: '100%' }} value={orden} onChange={(e) => setOrden(e.target.value)}>
           <option value="seccion">Sección</option>
           <option value="menor">Precio: de menor a mayor</option>
           <option value="mayor">Precio: de mayor a menor</option>

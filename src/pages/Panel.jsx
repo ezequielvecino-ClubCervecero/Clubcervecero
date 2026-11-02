@@ -12,6 +12,7 @@ import { subirImagenProducto } from '../imagenes'
 import Movimientos from './Movimientos'
 import TiendaControl from '../TiendaControl'
 import { FichaEscaneo, EntradasPorCobrar, EntradasEvento } from '../Entradas'
+import ProductoPlegable from '../ProductoPlegable'
 
 const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${[s.nombre, s.apellido].filter(Boolean).join(' ') || 'Sin nombre'}`
 
@@ -962,6 +963,7 @@ function FormatosAdmin({ formatos, recargar }) {
 }
 
 function TiendaAdmin() {
+  const [abierto, setAbierto] = useState(null)
   const vacio = { seccion: 'cervezas', nombre: '', formato: '', formato_id: null, descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
   const [formatos, setFormatos] = useState([])
   const [secciones, setSecciones] = useState([])
@@ -1044,7 +1046,7 @@ function TiendaAdmin() {
       <h2>Productos</h2>
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
-        <div key={r.id} className="card" style={{ opacity: r.activo ? 1 : 0.6 }}>
+        <ProductoPlegable key={r.id} r={r} abierto={abierto === r.id} onToggle={() => setAbierto(abierto === r.id ? null : r.id)}>
           <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} formatos={formatos} id={r.id}
             onImagen={(f) => cambiarImagen(f, (url) => editar(r.id, 'imagen_url', url))} />
           <div className="row" style={{ marginTop: 12 }}>
@@ -1053,7 +1055,7 @@ function TiendaAdmin() {
             </button>
             <button type="button" className="btn pri" onClick={() => guardar(r)}>Guardar cambios</button>
           </div>
-        </div>
+        </ProductoPlegable>
       ))}
     </>
   )

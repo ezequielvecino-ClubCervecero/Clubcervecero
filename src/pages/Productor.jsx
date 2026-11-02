@@ -7,6 +7,7 @@ import { Msg, Navegacion, fmt, fechaHora, cap, imprimirTicket } from '../ui'
 import { subirImagenProducto } from '../imagenes'
 import TiendaControl from '../TiendaControl'
 import { CamposProducto } from './Panel'
+import ProductoPlegable from '../ProductoPlegable'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + fmt(n)
@@ -276,6 +277,7 @@ const datosProducto = (r) => ({
 })
 
 function Productos({ perfil, datos, oculto }) {
+  const [abierto, setAbierto] = useState(null)
   const vacio = { seccion: 'cervezas', nombre: '', formato: '', formato_id: null, descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
   const [formatos, setFormatos] = useState([])
   const [secciones, setSecciones] = useState([])
@@ -349,7 +351,7 @@ function Productos({ perfil, datos, oculto }) {
       <Msg m={msg} />
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
-        <div key={r.id} className="card" style={{ opacity: r.activo ? 1 : 0.6 }}>
+        <ProductoPlegable key={r.id} r={r} abierto={abierto === r.id} onToggle={() => setAbierto(abierto === r.id ? null : r.id)}>
           <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} formatos={formatos} id={r.id}
             onImagen={(f) => cambiarImagen(f, (url) => editar(r.id, 'imagen_url', url))} />
           <div className="row" style={{ marginTop: 12 }}>
@@ -358,7 +360,7 @@ function Productos({ perfil, datos, oculto }) {
             </button>
             <button type="button" className="btn pri" onClick={() => guardar(r)}>Guardar cambios</button>
           </div>
-        </div>
+        </ProductoPlegable>
       ))}
     </>
   )
