@@ -41,8 +41,10 @@ export default function App() {
   }, [marca.tema, perfil])
   useEffect(() => {
     const f = (e) => setPerfil((p) => (p ? { ...p, tema: e.detail } : p))
+    const g = (e) => setPerfil((p) => (p ? { ...p, avisos_apagados: e.detail } : p))
     window.addEventListener('perfil-tema', f)
-    return () => window.removeEventListener('perfil-tema', f)
+    window.addEventListener('perfil-avisos', g)
+    return () => { window.removeEventListener('perfil-tema', f); window.removeEventListener('perfil-avisos', g) }
   }, [])
 
   useEffect(() => {
