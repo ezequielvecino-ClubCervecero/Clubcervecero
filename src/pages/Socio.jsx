@@ -51,7 +51,7 @@ function Inicio({ perfil }) {
     <>
       <div className="member" style={{ position: 'relative' }}>
         <QrIdentificacion codigo={p.codigo_qr} />
-        <h2 style={{ margin: 0, paddingRight: 224 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
+        <h2 style={{ margin: 0, paddingRight: 124 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>
         <p style={{ margin: '4px 0' }}><Categoria valor={p.categoria} /></p>
         <p className="mu">Socio N.º {String(p.numero_socio).padStart(4, '0')}</p>
         {p.usuario && <p className="mu">Usuario: {p.usuario}</p>}

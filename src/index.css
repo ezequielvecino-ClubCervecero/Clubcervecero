@@ -68,3 +68,7 @@ th{color:var(--mu);font-weight:500;font-size:12px}
 .fecha-evento{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:58px;padding:8px;border-radius:12px;background:var(--rs);color:var(--go);text-transform:capitalize}
 .fecha-evento b{font-size:22px;line-height:1}
 textarea{min-height:90px;resize:vertical}
+
+/* Filtros de la tienda: botones del mismo tamaño, repartidos a lo ancho */
+.chips-parejos{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
+.chips-parejos .chip{justify-content:center;text-align:center;width:100%;padding:9px 8px}

@@ -183,13 +183,13 @@ export default function Tienda({ perfil }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
-      <div className="chips">
+      <div className="chips chips-parejos">
         {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
           <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null); setEstiloSel(null) }}>{s.nombre}</button>
         ))}
       </div>
       {formatosHay.length > 0 && (
-        <div className="chips" aria-label="Filtrar por formato">
+        <div className="chips chips-parejos" aria-label="Filtrar por formato">
           <button className={'chip' + (!formatoSel ? ' on' : '')} onClick={() => setFormatoSel(null)}>Todos los formatos</button>
           {formatosHay.map(([id, nombre]) => (
             <button key={id} className={'chip' + (formatoSel === id ? ' on' : '')} onClick={() => setFormatoSel(id)}>{nombre}</button>
@@ -197,7 +197,7 @@ export default function Tienda({ perfil }) {
         </div>
       )}
       {estilosHay.length > 0 && (
-        <div className="chips" aria-label="Filtrar por estilo">
+        <div className="chips chips-parejos" aria-label="Filtrar por estilo">
           <button className={'chip' + (!estiloSel ? ' on' : '')} onClick={() => setEstiloSel(null)}>Todos los estilos</button>
           {estilosHay.map(([id, nombre]) => (
             <button key={id} className={'chip' + (estiloSel === id ? ' on' : '')} onClick={() => setEstiloSel(id)}>{nombre}</button>

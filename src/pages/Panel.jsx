@@ -5,7 +5,7 @@ import { supabase } from '../supabaseClient'
 import { MiUsuarioPropio } from '../MiUsuario'
 import Reloj from '../Reloj'
 import Usuarios from '../Usuarios'
-import { Icon, Msg, Navegacion, Categoria, CATS, fmt, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
+import { Icon, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
 import MasVendidos from '../MasVendidos'
 import { subirImagenProducto } from '../imagenes'
@@ -978,6 +978,7 @@ function FormatosAdmin({ formatos, recargar }) {
 }
 
 function EstilosAdmin({ estilos, recargar }) {
+  const [abierto, setAbierto] = useState(null)
   const [nombres, setNombres] = useState({})
   const [nuevo, setNuevo] = useState('')
   const [msg, setMsg] = useState(null)
@@ -1007,6 +1008,13 @@ function EstilosAdmin({ estilos, recargar }) {
       <p className="mu">Lista fija con una imagen por estilo. Cuando un productor elige el estilo de su producto, esa imagen se pone sola y puede cambiarla por una propia. Los socios ven el estilo en cada producto y pueden filtrar por estilo. Cambiar la imagen de un estilo no modifica los productos ya cargados.</p>
       {estilos.map((e) => (
         <div key={e.id} className="card">
+          <button type="button" aria-expanded={abierto === e.id} onClick={() => setAbierto(abierto === e.id ? null : e.id)}
+            style={{ all: 'unset', cursor: 'pointer', display: 'flex', width: '100%', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+            <b style={{ flex: 1 }}>{e.nombre}</b>
+            <span className="mu">{e.imagen_url ? 'Con imagen' : 'Sin imagen'}</span>
+            <span aria-hidden="true">{abierto === e.id ? '▴' : '▾'}</span>
+          </button>
+          {abierto === e.id && <div style={{ marginTop: 10 }}>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
             <input aria-label={'Estilo ' + e.nombre} maxLength={40} value={nombres[e.id] ?? e.nombre} onChange={(x) => setNombres({ ...nombres, [e.id]: x.target.value })} />
             <button type="button" className="btn" disabled={(nombres[e.id] ?? e.nombre).trim() === e.nombre}
@@ -1019,6 +1027,7 @@ function EstilosAdmin({ estilos, recargar }) {
           <label htmlFor={'est-img-' + e.id}>{e.imagen_url ? 'Cambiar imagen' : 'Imagen del estilo'}</label>
           <input id={'est-img-' + e.id} type="file" accept="image/png,image/jpeg,image/webp" onChange={(x) => { subir(e, x.target.files[0]); x.target.value = '' }} />
           {e.imagen_url && <div style={{ marginTop: 8 }}><button type="button" className="btn" onClick={() => accion(supabase.rpc('guardar_imagen_estilo', { p_id: e.id, p_url: null }), 'Imagen quitada.')}>Quitar imagen</button></div>}
+          </div>}
         </div>
       ))}
       <form className="row" style={{ marginTop: 12, flexWrap: 'nowrap' }} onSubmit={(x) => {
@@ -1035,6 +1044,8 @@ function EstilosAdmin({ estilos, recargar }) {
 
 function TiendaAdmin() {
   const [abierto, setAbierto] = useState(null)
+  const [parte, setParte] = useState(null)
+  const alternarParte = (k) => setParte((p) => (p === k ? null : k))
   const vacio = { seccion: 'cervezas', nombre: '', formato: '', formato_id: null, descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
   const [formatos, setFormatos] = useState([])
   const [estilos, setEstilos] = useState([])
@@ -1102,24 +1113,26 @@ function TiendaAdmin() {
 
   return (
     <>
-      <SeccionesAdmin secciones={secciones} productos={lista} recargar={cargar} />
-      <FormatosAdmin formatos={formatos} recargar={cargar} />
-      <EstilosAdmin estilos={estilos} recargar={cargar} />
-
-      <div className="card">
-        <h3>Más vendidos</h3>
+      <Acordeon titulo="Secciones" icono="pint" abierto={parte === 'secciones'} onToggle={() => alternarParte('secciones')}>
+        <SeccionesAdmin secciones={secciones} productos={lista} recargar={cargar} />
+      </Acordeon>
+      <Acordeon titulo="Formatos" icono="barrel" abierto={parte === 'formatos'} onToggle={() => alternarParte('formatos')}>
+        <FormatosAdmin formatos={formatos} recargar={cargar} />
+      </Acordeon>
+      <Acordeon titulo="Estilos de cerveza" icono="hop" abierto={parte === 'estilos'} onToggle={() => alternarParte('estilos')}>
+        <EstilosAdmin estilos={estilos} recargar={cargar} />
+      </Acordeon>
+      <Acordeon titulo="Más vendidos" icono="crown" abierto={parte === 'vendidos'} onToggle={() => alternarParte('vendidos')}>
         <MasVendidos />
-      </div>
-
-      <form className="card" onSubmit={agregar}>
-        <h3>Agregar producto</h3>
-        <CamposProducto r={nuevo} set={(c, v) => setNuevo((n) => ({ ...n, [c]: v }))} secciones={secciones} formatos={formatos} estilos={estilos} id="nuevo"
-          onImagen={(f) => cambiarImagen(f, (url) => setNuevo((n) => ({ ...n, imagen_url: url })))} />
-        <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
-      </form>
-      <Msg m={msg} />
-
-      <h2>Productos</h2>
+      </Acordeon>
+      <Acordeon titulo="Agregar producto" icono="gift" abierto={parte === 'agregar'} onToggle={() => alternarParte('agregar')}>
+        <form onSubmit={agregar}>
+          <CamposProducto r={nuevo} set={(c, v) => setNuevo((n) => ({ ...n, [c]: v }))} secciones={secciones} formatos={formatos} estilos={estilos} id="nuevo"
+            onImagen={(f) => cambiarImagen(f, (url) => setNuevo((n) => ({ ...n, imagen_url: url })))} />
+          <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
+        </form>
+      </Acordeon>
+      <Acordeon titulo={'Productos (' + lista.length + ')'} icono="pint" abierto={parte === 'productos'} onToggle={() => alternarParte('productos')}>
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
         <ProductoPlegable key={r.id} r={r} abierto={abierto === r.id} onToggle={() => setAbierto(abierto === r.id ? null : r.id)}>
@@ -1133,6 +1146,8 @@ function TiendaAdmin() {
           </div>
         </ProductoPlegable>
       ))}
+      </Acordeon>
+      <Msg m={msg} />
     </>
   )
 }
