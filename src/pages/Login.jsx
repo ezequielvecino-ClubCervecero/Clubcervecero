@@ -17,13 +17,10 @@ export default function Login({ marca }) {
 
   async function olvide() {
     setMsg(null)
-    let correo = ident.trim()
-    if (!correo) return setMsg({ tipo: 'error', texto: 'Escribí tu usuario o correo y volvé a tocar "Olvidé mi clave".' })
-    if (!correo.includes('@')) {
-      const r = await supabase.rpc('email_de_usuario', { p_usuario: correo })
-      correo = r.data || ''
-    }
-    if (correo) await supabase.auth.resetPasswordForEmail(correo, { redirectTo: window.location.origin })
+    const dato = ident.trim()
+    if (!dato) return setMsg({ tipo: 'error', texto: 'Escribí tu usuario o correo y volvé a tocar "Olvidé mi clave".' })
+    // El correo se resuelve en el servidor: nunca llega al teléfono.
+    await supabase.functions.invoke('recuperar-clave', { body: { ident: dato } })
     // Siempre el mismo mensaje, exista o no la cuenta.
     setMsg({ tipo: 'ok', texto: 'Si la cuenta existe, te mandamos un correo para elegir una clave nueva.' })
   }
@@ -35,15 +32,22 @@ export default function Login({ marca }) {
     setEnviando(true)
     let res
     if (modo === 'ingresar') {
-      // Con usuario (sin @) se busca primero el correo de esa cuenta.
-      let correo = ident.trim()
-      if (!correo.includes('@')) {
-        const r = await supabase.rpc('email_de_usuario', { p_usuario: correo })
-        correo = r.data || ''
+      const dato = ident.trim()
+      if (dato.includes('@')) {
+        res = await supabase.auth.signInWithPassword({ email: dato, password: clave })
+      } else {
+        // Con usuario, el servidor busca el correo y devuelve solo la sesión.
+        const r = await supabase.functions.invoke('login-usuario', { body: { ident: dato, clave } })
+        let detalle = r.data
+        if (r.error && r.error.context && typeof r.error.context.json === 'function') {
+          try { detalle = await r.error.context.json() } catch { detalle = null }
+        }
+        if (detalle && detalle.access_token) {
+          res = await supabase.auth.setSession({ access_token: detalle.access_token, refresh_token: detalle.refresh_token })
+        } else {
+          res = { error: { message: detalle && detalle.error === 'banned' ? 'banned' : 'Usuario o contraseña incorrectos' } }
+        }
       }
-      res = correo
-        ? await supabase.auth.signInWithPassword({ email: correo, password: clave })
-        : { error: { message: 'Usuario o contraseña incorrectos' } }
     } else {
       const usr = usuario.trim().toLowerCase()
       const libre = await supabase.rpc('usuario_disponible', { p_usuario: usr })
