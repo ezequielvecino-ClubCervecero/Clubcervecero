@@ -72,3 +72,17 @@ textarea{min-height:90px;resize:vertical}
 /* Filtros de la tienda: botones del mismo tamaño, repartidos a lo ancho */
 .chips-parejos{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
 .chips-parejos .chip{justify-content:center;text-align:center;width:100%;padding:9px 8px}
+
+/* Temas de color. El tema "violeta" (el de siempre) es el predeterminado y no se toca. */
+:root[data-tema="claro"]{--bg:#f6f4fb;--sf:#ffffff;--rs:#ece8f7;--ln:#d6cfea;--am:#7c3aed;--go:#0369a1;--ink:#1d1830;--mu:#5f587d;--ok:#047857;--bad:#be123c;color-scheme:light}
+:root[data-tema="claro"] .member{background:linear-gradient(155deg,#e9e2fd,#ffffff 62%);border-color:#c4b5fd;box-shadow:0 0 26px rgba(124,58,237,.14)}
+:root[data-tema="claro"] .msg.error{background:rgba(190,18,60,.08)}
+:root[data-tema="claro"] .msg.ok{background:rgba(4,120,87,.08)}
+:root[data-tema="claro"] .estado.warn{border-left-color:#b45309}:root[data-tema="claro"] .estado.warn b{color:#b45309}
+:root[data-tema="claro"] .estado.bad{border-left-color:#be123c}:root[data-tema="claro"] .estado.bad b{color:#be123c}
+:root[data-tema="claro"] .pill.warn{color:#b45309;border-color:#b45309}
+:root[data-tema="claro"] .pill.bad{color:#be123c;border-color:#be123c}
+:root[data-tema="claro"] .pill.gold{color:#8a6a00;border-color:#b8860b;background:rgba(184,134,11,.12)}
+
+:root[data-tema="oscuro"]{--bg:#0b0b0c;--sf:#161618;--rs:#202023;--ln:#303034;--am:#8b5cf6;--go:#7dd3fc;--ink:#f2f2f3;--mu:#9b9ba3;--ok:#6ee7b7;--bad:#f09bb5;color-scheme:dark}
+:root[data-tema="oscuro"] .member{background:linear-gradient(155deg,#2b2450,#111113 62%);border-color:#40366b;box-shadow:0 0 30px rgba(139,92,246,.18)}

@@ -28,6 +28,14 @@ export default function App() {
   }, [])
   useEffect(() => { cargarMarca() }, [cargarMarca])
   useEffect(() => { document.title = marca.nombre_app }, [marca.nombre_app])
+  // Tema de color elegido por el administrador (vale para todos). Sin dato, queda el violeta de siempre.
+  useEffect(() => {
+    const t = ['claro', 'oscuro'].includes(marca.tema) ? marca.tema : 'violeta'
+    document.documentElement.dataset.tema = t
+    const color = { violeta: '#120f1c', claro: '#f6f4fb', oscuro: '#0b0b0c' }[t]
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', color)
+  }, [marca.tema])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))

@@ -642,6 +642,12 @@ function Marca({ marca, onGuardado }) {
     return true
   }
 
+  const TEMAS = [['violeta', 'Violeta (el de siempre)'], ['claro', 'Claro'], ['oscuro', 'Oscuro']]
+  async function elegirTema(t) {
+    setMsg(null)
+    if (await actualizar({ tema: t })) setMsg({ tipo: 'ok', texto: 'Tema cambiado: ya lo ven todos los socios.' })
+  }
+
   async function guardarTextos(e) {
     e.preventDefault()
     setMsg(null)
@@ -671,6 +677,15 @@ function Marca({ marca, onGuardado }) {
 
   return (
     <>
+      <div className="card">
+        <h3>Tema de color</h3>
+        <p className="mu">Cambia el aspecto de toda la app para todos los socios, productores y el personal. Podés volver al violeta cuando quieras.</p>
+        <div className="chips chips-parejos">
+          {TEMAS.map(([id, nombre]) => (
+            <button key={id} type="button" className={'chip' + ((marca.tema || 'violeta') === id ? ' on' : '')} onClick={() => elegirTema(id)}>{nombre}</button>
+          ))}
+        </div>
+      </div>
       <form className="card" onSubmit={guardarTextos}>
         <h3>Datos del negocio</h3>
         <label htmlFor="m-nombre">Nombre de la aplicación</label>
