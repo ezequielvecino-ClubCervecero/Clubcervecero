@@ -828,7 +828,15 @@ function Cobros({ onCambio, esAdmin }) {
   )
 }
 
-export function CamposProducto({ r, set, secciones, formatos = [], id, onImagen, conCerveceria }) {
+export function CamposProducto({ r, set, secciones, formatos = [], estilos = [], id, onImagen, conCerveceria }) {
+  // Al elegir un estilo se pone su imagen, salvo que el productor ya tenga una propia.
+  function elegirEstilo(valor) {
+    const nuevoId = valor ? Number(valor) : null
+    const viejo = estilos.find((e) => e.id === r.estilo_id)
+    const nuevo = estilos.find((e) => e.id === nuevoId)
+    set('estilo_id', nuevoId)
+    if (nuevo && nuevo.imagen_url && (!r.imagen_url || (viejo && viejo.imagen_url === r.imagen_url))) set('imagen_url', nuevo.imagen_url)
+  }
   return (
     <div className="filtros">
       <div><label htmlFor={id + '-n'}>Nombre</label><input id={id + '-n'} value={r.nombre} onChange={(e) => set('nombre', e.target.value)} required /></div>
@@ -837,6 +845,13 @@ export function CamposProducto({ r, set, secciones, formatos = [], id, onImagen,
         <label htmlFor={id + '-s'}>Sección</label>
         <select id={id + '-s'} value={r.seccion} onChange={(e) => set('seccion', e.target.value)}>
           {secciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={id + '-es'}>Estilo de cerveza</label>
+        <select id={id + '-es'} value={r.estilo_id ?? ''} onChange={(e) => elegirEstilo(e.target.value)}>
+          <option value="">Sin estilo</option>
+          {estilos.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
         </select>
       </div>
       <div>
@@ -854,7 +869,7 @@ export function CamposProducto({ r, set, secciones, formatos = [], id, onImagen,
       </div>
       <div><label htmlFor={id + '-st'}>Stock (unidades)</label><input id={id + '-st'} type="number" min="0" step="1" value={r.stock} onChange={(e) => set('stock', e.target.value)} required /></div>
       <div style={{ gridColumn: '1 / -1' }}>
-        <label htmlFor={id + '-i'}>Imagen (opcional, se reduce sola para que sea liviana)</label>
+        <label htmlFor={id + '-i'}>Imagen (se pone sola al elegir el estilo; podés cambiarla por una tuya)</label>
         {r.imagen_url && <img className="prod-img" src={r.imagen_url} alt="Imagen actual del producto" style={{ margin: '6px 0' }} />}
         <input id={id + '-i'} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { onImagen(e.target.files[0]); e.target.value = '' }} />
         {r.imagen_url && <div style={{ marginTop: 8 }}><button type="button" className="btn" onClick={() => set('imagen_url', null)}>Quitar imagen</button></div>}
@@ -962,24 +977,83 @@ function FormatosAdmin({ formatos, recargar }) {
   )
 }
 
+function EstilosAdmin({ estilos, recargar }) {
+  const [nombres, setNombres] = useState({})
+  const [nuevo, setNuevo] = useState('')
+  const [msg, setMsg] = useState(null)
+  useEffect(() => { setNombres(Object.fromEntries(estilos.map((e) => [e.id, e.nombre]))) }, [estilos])
+
+  async function accion(promesa, ok) {
+    setMsg(null)
+    const { error } = await promesa
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    if (ok) setMsg({ tipo: 'ok', texto: ok })
+    recargar()
+  }
+  async function subir(e, archivo) {
+    if (!archivo) return
+    setMsg(null)
+    try {
+      const url = await subirImagenProducto(archivo)
+      await accion(supabase.rpc('guardar_imagen_estilo', { p_id: e.id, p_url: url }), 'Imagen guardada para ' + e.nombre + '.')
+    } catch (err) {
+      setMsg({ tipo: 'error', texto: err.message })
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>Estilos de cerveza</h3>
+      <p className="mu">Lista fija con una imagen por estilo. Cuando un productor elige el estilo de su producto, esa imagen se pone sola y puede cambiarla por una propia. Los socios ven el estilo en cada producto y pueden filtrar por estilo. Cambiar la imagen de un estilo no modifica los productos ya cargados.</p>
+      {estilos.map((e) => (
+        <div key={e.id} className="card">
+          <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <input aria-label={'Estilo ' + e.nombre} maxLength={40} value={nombres[e.id] ?? e.nombre} onChange={(x) => setNombres({ ...nombres, [e.id]: x.target.value })} />
+            <button type="button" className="btn" disabled={(nombres[e.id] ?? e.nombre).trim() === e.nombre}
+              onClick={() => accion(supabase.rpc('renombrar_estilo', { p_id: e.id, p_nombre: nombres[e.id] }), 'Estilo guardado.')}>Guardar</button>
+            <button type="button" className="btn" onClick={() => {
+              if (window.confirm('¿Borrar el estilo «' + e.nombre + '»?')) accion(supabase.rpc('borrar_estilo', { p_id: e.id }), 'Estilo borrado.')
+            }}>Borrar</button>
+          </div>
+          {e.imagen_url && <img className="prod-img" src={e.imagen_url} alt={'Imagen de ' + e.nombre} style={{ margin: '8px 0' }} />}
+          <label htmlFor={'est-img-' + e.id}>{e.imagen_url ? 'Cambiar imagen' : 'Imagen del estilo'}</label>
+          <input id={'est-img-' + e.id} type="file" accept="image/png,image/jpeg,image/webp" onChange={(x) => { subir(e, x.target.files[0]); x.target.value = '' }} />
+          {e.imagen_url && <div style={{ marginTop: 8 }}><button type="button" className="btn" onClick={() => accion(supabase.rpc('guardar_imagen_estilo', { p_id: e.id, p_url: null }), 'Imagen quitada.')}>Quitar imagen</button></div>}
+        </div>
+      ))}
+      <form className="row" style={{ marginTop: 12, flexWrap: 'nowrap' }} onSubmit={(x) => {
+        x.preventDefault()
+        accion(supabase.rpc('crear_estilo', { p_nombre: nuevo }), 'Estilo agregado.').then(() => setNuevo(''))
+      }}>
+        <input aria-label="Nuevo estilo" placeholder="Nuevo estilo (por ejemplo IPA)" maxLength={40} value={nuevo} onChange={(x) => setNuevo(x.target.value)} required />
+        <button className="btn pri">Agregar</button>
+      </form>
+      <Msg m={msg} />
+    </div>
+  )
+}
+
 function TiendaAdmin() {
   const [abierto, setAbierto] = useState(null)
   const vacio = { seccion: 'cervezas', nombre: '', formato: '', formato_id: null, descripcion: '', precio_pesos: '', stock: '', imagen_url: null }
   const [formatos, setFormatos] = useState([])
+  const [estilos, setEstilos] = useState([])
   const [secciones, setSecciones] = useState([])
   const [lista, setLista] = useState([])
   const [nuevo, setNuevo] = useState(vacio)
   const [msg, setMsg] = useState(null)
 
   const cargar = useCallback(async () => {
-    const [s, p, f] = await Promise.all([
+    const [s, p, f, es] = await Promise.all([
       supabase.from('tienda_secciones').select('*').order('orden'),
       supabase.from('tienda_productos').select('*').is('productor_id', null).order('seccion').order('nombre'),
       supabase.from('tienda_formatos').select('*').order('id'),
+      supabase.from('tienda_estilos').select('*').order('nombre'),
     ])
     setSecciones(s.data || [])
     setLista(p.data || [])
     setFormatos(f.data || [])
+    setEstilos(es.data || [])
   }, [])
   useEffect(() => { cargar() }, [cargar])
   // Si la sección por defecto ya no existe (se borró), se usa la primera.
@@ -992,6 +1066,7 @@ function TiendaAdmin() {
     seccion: r.seccion, nombre: r.nombre.trim(),
     formato: r.formato && r.formato.trim() ? r.formato.trim() : null,
     formato_id: r.formato_id || null,
+    estilo_id: r.estilo_id || null,
     descripcion: r.descripcion && r.descripcion.trim() ? r.descripcion.trim() : null,
     precio_pesos: Number(r.precio_pesos),
     stock: Math.max(0, Math.floor(Number(r.stock || 0))),
@@ -1029,6 +1104,7 @@ function TiendaAdmin() {
     <>
       <SeccionesAdmin secciones={secciones} productos={lista} recargar={cargar} />
       <FormatosAdmin formatos={formatos} recargar={cargar} />
+      <EstilosAdmin estilos={estilos} recargar={cargar} />
 
       <div className="card">
         <h3>Más vendidos</h3>
@@ -1037,7 +1113,7 @@ function TiendaAdmin() {
 
       <form className="card" onSubmit={agregar}>
         <h3>Agregar producto</h3>
-        <CamposProducto r={nuevo} set={(c, v) => setNuevo({ ...nuevo, [c]: v })} secciones={secciones} formatos={formatos} id="nuevo"
+        <CamposProducto r={nuevo} set={(c, v) => setNuevo((n) => ({ ...n, [c]: v }))} secciones={secciones} formatos={formatos} estilos={estilos} id="nuevo"
           onImagen={(f) => cambiarImagen(f, (url) => setNuevo((n) => ({ ...n, imagen_url: url })))} />
         <button className="btn pri" style={{ marginTop: 16 }}>Agregar producto</button>
       </form>
@@ -1047,7 +1123,7 @@ function TiendaAdmin() {
       {lista.length === 0 && <p className="mu">Todavía no cargaste productos.</p>}
       {lista.map((r) => (
         <ProductoPlegable key={r.id} r={r} abierto={abierto === r.id} onToggle={() => setAbierto(abierto === r.id ? null : r.id)}>
-          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} formatos={formatos} id={r.id}
+          <CamposProducto r={r} set={(c, v) => editar(r.id, c, v)} secciones={secciones} formatos={formatos} estilos={estilos} id={r.id}
             onImagen={(f) => cambiarImagen(f, (url) => editar(r.id, 'imagen_url', url))} />
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" className={'chip' + (r.activo ? ' on' : '')} onClick={() => editar(r.id, 'activo', !r.activo)}>

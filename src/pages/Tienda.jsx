@@ -38,6 +38,7 @@ export default function Tienda({ perfil }) {
   const [saldo, setSaldo] = useState(0)
   const [seccion, setSeccion] = useState('todos')
   const [formatoSel, setFormatoSel] = useState(null)
+  const [estiloSel, setEstiloSel] = useState(null)
   const [orden, setOrden] = useState('seccion')
   const [carrito, setCarrito] = useState({})
   const [pago, setPago] = useState('efectivo')
@@ -56,7 +57,7 @@ export default function Tienda({ perfil }) {
   const cargar = useCallback(async () => {
     const [s, p, c, sd, et] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
-      supabase.from('tienda_productos').select('*, productores(cerveceria), tienda_formatos(nombre)').eq('activo', true).gt('stock', 0).order('nombre'),
+      supabase.from('tienda_productos').select('*, productores(cerveceria), tienda_formatos(nombre), tienda_estilos(nombre)').eq('activo', true).gt('stock', 0).order('nombre'),
       supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
       supabase.rpc('estado_tiendas'),
@@ -172,7 +173,8 @@ export default function Tienda({ perfil }) {
   const deSeccion = abiertos.filter((p) => seccion === 'todos' || p.seccion === seccion)
   // Formatos que hay en lo que se está viendo (para el filtro).
   const formatosHay = [...new Map(deSeccion.filter((p) => p.formato_id && p.tienda_formatos).map((p) => [p.formato_id, p.tienda_formatos.nombre])).entries()]
-  const filtrados = deSeccion.filter((p) => !formatoSel || p.formato_id === formatoSel)
+  const estilosHay = [...new Map(deSeccion.filter((p) => p.estilo_id && p.tienda_estilos).map((p) => [p.estilo_id, p.tienda_estilos.nombre])).entries()]
+  const filtrados = deSeccion.filter((p) => (!formatoSel || p.formato_id === formatoSel) && (!estiloSel || p.estilo_id === estiloSel))
   const visibles = [...filtrados].sort((a, b) => {
     if (orden === 'menor') return Number(a.precio_pesos) - Number(b.precio_pesos) || a.nombre.localeCompare(b.nombre)
     if (orden === 'mayor') return Number(b.precio_pesos) - Number(a.precio_pesos) || a.nombre.localeCompare(b.nombre)
@@ -183,7 +185,7 @@ export default function Tienda({ perfil }) {
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
       <div className="chips">
         {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
-          <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null) }}>{s.nombre}</button>
+          <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null); setEstiloSel(null) }}>{s.nombre}</button>
         ))}
       </div>
       {formatosHay.length > 0 && (
@@ -191,6 +193,14 @@ export default function Tienda({ perfil }) {
           <button className={'chip' + (!formatoSel ? ' on' : '')} onClick={() => setFormatoSel(null)}>Todos los formatos</button>
           {formatosHay.map(([id, nombre]) => (
             <button key={id} className={'chip' + (formatoSel === id ? ' on' : '')} onClick={() => setFormatoSel(id)}>{nombre}</button>
+          ))}
+        </div>
+      )}
+      {estilosHay.length > 0 && (
+        <div className="chips" aria-label="Filtrar por estilo">
+          <button className={'chip' + (!estiloSel ? ' on' : '')} onClick={() => setEstiloSel(null)}>Todos los estilos</button>
+          {estilosHay.map(([id, nombre]) => (
+            <button key={id} className={'chip' + (estiloSel === id ? ' on' : '')} onClick={() => setEstiloSel(id)}>{nombre}</button>
           ))}
         </div>
       )}
@@ -210,6 +220,7 @@ export default function Tienda({ perfil }) {
             <div style={{ flex: 1, minWidth: 0 }}>
             <b>{p.nombre}</b>{p.formato ? <span className="mu"> · {p.formato}</span> : null}
             {p.tienda_formatos && <span className="pill ok" style={{ marginLeft: 6 }}>{p.tienda_formatos.nombre}</span>}
+            {p.tienda_estilos && <span className="pill warn" style={{ marginLeft: 6 }}>{p.tienda_estilos.nombre}</span>}
             {seccion === 'todos' && nombreSeccion[p.seccion] && <p className="mu">{nombreSeccion[p.seccion]}</p>}
             <p className="mu">Cervecería: <b>{cerveceriaDe(p, config.cerveceria_club)}</b></p>
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
