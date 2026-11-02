@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
 import Reloj from '../Reloj'
+import { textosWa } from '../whatsapp'
 import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
 
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
@@ -13,21 +14,23 @@ const ESTADOS = { pendiente: ['warn', 'En espera de confirmación'], confirmado:
 // Cervecería de cada producto: la del productor, o el nombre del club (se edita en Marca).
 const cerveceriaDe = (p, club) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : club || 'Club Cervecero')
 
-function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, mapa, totalPesos, totalPuntos, aviso }) {
+function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, mapa, totalPesos, totalPuntos, aviso, textos }) {
+  const T = textosWa(textos)
   const L = []
-  L.push('Hola! Hice el pedido N.º ' + numero + ' en la app del club.')
-  L.push('Socio N.º ' + String(perfil.numero_socio).padStart(4, '0') + (perfil.nombre ? ' - ' + perfil.nombre : ''))
+  L.push(T.saludo.replace('{numero}', numero))
+  L.push(T.socio + ' ' + String(perfil.numero_socio).padStart(4, '0') + (perfil.nombre ? ' - ' + perfil.nombre : ''))
   L.push('')
   lineas.forEach((l) => {
     const precio = pago === 'puntos' ? fmt(l.precio_puntos * l.cantidad) + ' pts' : pesos(l.precio_pesos * l.cantidad)
     L.push('• ' + l.cantidad + ' x ' + l.nombre + (l.formato ? ' (' + l.formato + ')' : '') + ' - ' + precio)
   })
   L.push('')
-  L.push('Total: ' + (pago === 'puntos' ? fmt(totalPuntos) + ' puntos' : pesos(totalPesos)))
-  L.push('Forma de pago: ' + PAGO_TXT[pago])
-  L.push(entrega === 'envio' ? 'Entrega: envío a ' + direccion : 'Entrega: retiro en el local')
-  if (entrega === 'envio' && mapa) L.push('Ubicación: ' + mapa)
+  L.push(T.total + ' ' + (pago === 'puntos' ? fmt(totalPuntos) + ' puntos' : pesos(totalPesos)))
+  L.push(T.pago + ' ' + PAGO_TXT[pago])
+  L.push(entrega === 'envio' ? T.envio + ' ' + direccion : T.retiro)
+  if (entrega === 'envio' && mapa) L.push(T.ubicacion + ' ' + mapa)
   if (entrega === 'envio' && aviso) { L.push(''); L.push(aviso) }
+  if (T.cierre.trim()) { L.push(''); L.push(T.cierre.trim()) }
   return L.join('\n')
 }
 
@@ -58,7 +61,7 @@ export default function Tienda({ perfil }) {
     const [s, p, c, sd, et] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
       supabase.from('tienda_productos').select('*, productores(cerveceria), tienda_formatos(nombre), tienda_estilos(nombre)').eq('activo', true).gt('stock', 0).order('nombre'),
-      supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club').eq('id', 1).single(),
+      supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club, wa_textos').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
       supabase.rpc('estado_tiendas'),
     ])
@@ -131,7 +134,7 @@ export default function Tienda({ perfil }) {
     // Un pedido por cervecería: cada uno lleva su propio mensaje, al WhatsApp de quien lo atiende.
     const hechos = (data.pedidos || []).map((ped) => {
       const propias = lineas.filter((l) => (l.productor_id || null) === (ped.productor_id || null))
-      const texto = armarMensaje({ ...snapshot, lineas: propias, numero: ped.numero, perfil, totalPesos: Number(ped.total_pesos), totalPuntos: Number(ped.total_puntos) })
+      const texto = armarMensaje({ ...snapshot, textos: config.wa_textos, lineas: propias, numero: ped.numero, perfil, totalPesos: Number(ped.total_pesos), totalPuntos: Number(ped.total_puntos) })
       const destino = ped.productor_id ? ped.whatsapp : config.whatsapp
       return {
         numero: ped.numero, productor: !!ped.productor_id, cerveceria: ped.cerveceria || config.cerveceria_club || 'Club Cervecero',

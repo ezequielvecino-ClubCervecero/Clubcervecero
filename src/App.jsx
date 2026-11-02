@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Socio from './pages/Socio'
 import Panel from './pages/Panel'
 import Productor from './pages/Productor'
+import Preferencias from './Preferencias'
 
 const MARCA_BASE = {
   nombre_app: 'Club Cervecero',
@@ -21,6 +22,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [marca, setMarca] = useState(MARCA_BASE)
   const [recuperando, setRecuperando] = useState(false)
+  const [verPrefs, setVerPrefs] = useState(false)
 
   const cargarMarca = useCallback(() => {
     supabase.from('configuracion').select('*').eq('id', 1).single()
@@ -30,12 +32,18 @@ export default function App() {
   useEffect(() => { document.title = marca.nombre_app }, [marca.nombre_app])
   // Tema de color elegido por el administrador (vale para todos). Sin dato, queda el violeta de siempre.
   useEffect(() => {
-    const t = ['claro', 'oscuro'].includes(marca.tema) ? marca.tema : 'violeta'
+    const elegido = perfil && perfil.tema ? perfil.tema : marca.tema
+    const t = ['claro', 'oscuro'].includes(elegido) ? elegido : 'violeta'
     document.documentElement.dataset.tema = t
     const color = { violeta: '#120f1c', claro: '#f6f4fb', oscuro: '#0b0b0c' }[t]
     const meta = document.querySelector('meta[name="theme-color"]')
     if (meta) meta.setAttribute('content', color)
-  }, [marca.tema])
+  }, [marca.tema, perfil])
+  useEffect(() => {
+    const f = (e) => setPerfil((p) => (p ? { ...p, tema: e.detail } : p))
+    window.addEventListener('perfil-tema', f)
+    return () => window.removeEventListener('perfil-tema', f)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -80,13 +88,15 @@ export default function App() {
         </div>
         <div className="row">
           <span className="mu">{perfil.nombre || session.user.email} · {ROLES[perfil.rol]}</span>
+          {perfil.rol !== 'socio' && <button className="btn" onClick={() => setVerPrefs((v) => !v)}>{verPrefs ? 'Volver' : 'Mis preferencias'}</button>}
           <button className="btn" onClick={() => supabase.auth.signOut()}>Salir</button>
         </div>
       </header>
+      {perfil.rol !== 'socio' && verPrefs && <Preferencias perfil={perfil} />}
       {perfil.rol === 'socio' && <Socio perfil={perfil} />}
-      {perfil.rol === 'personal' && <Panel esAdmin={false} />}
-      {perfil.rol === 'productor' && <Productor perfil={perfil} />}
-      {perfil.rol === 'admin' && <Panel esAdmin marca={marca} onMarca={cargarMarca} />}
+      {!verPrefs && perfil.rol === 'personal' && <Panel esAdmin={false} />}
+      {!verPrefs && perfil.rol === 'productor' && <Productor perfil={perfil} />}
+      {!verPrefs && perfil.rol === 'admin' && <Panel esAdmin marca={marca} onMarca={cargarMarca} />}
     </>
   )
 }

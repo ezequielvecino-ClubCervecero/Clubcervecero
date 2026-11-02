@@ -6,6 +6,7 @@ import Tienda from './Tienda'
 import Puesto from '../Puesto'
 import { MisDirecciones } from '../Direcciones'
 import MiUsuario from '../MiUsuario'
+import Preferencias from '../Preferencias'
 import { QrIdentificacion, EntradasSocio } from '../Entradas'
 import MasVendidos from '../MasVendidos'
 import Reloj from '../Reloj'
@@ -30,7 +31,7 @@ function estadoCuota(p) {
   return { clase: 'ok', titulo: 'Cuota al día', texto: 'Paga hasta el ' + fecha + '.' }
 }
 
-function Inicio({ perfil }) {
+function Inicio({ perfil, irAEntrada }) {
   const [p, setP] = useState(perfil)
   const [saldo, setSaldo] = useState(0)
 
@@ -67,7 +68,7 @@ function Inicio({ perfil }) {
       </div>
 
       <PedidosEnCamino perfil={perfil} />
-      <ProximoEvento />
+      <ProximoEvento irAEntrada={irAEntrada} />
       <Novedades />
     </>
   )
@@ -228,6 +229,10 @@ function Perfil({ perfil }) {
         <InformarPago />
       </Acordeon>
 
+      <Acordeon titulo="Mis preferencias" icono="hop" abierto={abierta === 'prefs'} onToggle={() => alternar('prefs')}>
+        <Preferencias perfil={p} />
+      </Acordeon>
+
       <Acordeon titulo="Mis datos" icono="crown" abierto={abierta === 'datos'} onToggle={() => alternar('datos')}>
         <MisDatos p={p} onListo={cargar} />
       </Acordeon>
@@ -260,8 +265,8 @@ function Perfil({ perfil }) {
   )
 }
 
-function Canjes({ perfil }) {
-  const [seccion, setSeccion] = useState('premios')
+function Canjes({ perfil, eventoCompra }) {
+  const [seccion, setSeccion] = useState(eventoCompra ? 'entradas' : 'premios')
   const [saldo, setSaldo] = useState(0)
   const [recs, setRecs] = useState([])
   const [cat, setCat] = useState(CATS[0])
@@ -324,7 +329,7 @@ function Canjes({ perfil }) {
         </button>
       </div>
 
-      {seccion === 'entradas' && <EntradasSocio onSaldo={cargar} />}
+      {seccion === 'entradas' && <EntradasSocio onSaldo={cargar} eventoCompra={eventoCompra} />}
 
       {seccion === 'premios' && <>
       <h2>Premios</h2>
@@ -387,11 +392,12 @@ function Club({ perfil }) {
 
 export default function Socio({ perfil }) {
   const [vista, setVista] = useState('inicio')
+  const [eventoCompra, setEventoCompra] = useState(null)
   return (
     <>
-      {vista === 'inicio' && <Inicio perfil={perfil} />}
+      {vista === 'inicio' && <Inicio perfil={perfil} irAEntrada={(id) => { setEventoCompra(id); setVista('canjes') }} />}
       {vista === 'tienda' && <Tienda perfil={perfil} />}
-      {vista === 'canjes' && <Canjes perfil={perfil} />}
+      {vista === 'canjes' && <Canjes perfil={perfil} eventoCompra={eventoCompra} />}
       {vista === 'club' && <Club perfil={perfil} />}
       {vista === 'perfil' && <Perfil perfil={perfil} />}
       <Navegacion
@@ -403,7 +409,7 @@ export default function Socio({ perfil }) {
 
 const ZONA = 'America/Argentina/Buenos_Aires'
 
-function ProximoEvento() {
+function ProximoEvento({ irAEntrada }) {
   const [ev, setEv] = useState(undefined)
   const [msg, setMsg] = useState(null)
 
@@ -433,13 +439,13 @@ function ProximoEvento() {
   return (
     <>
       <h2>Próximos eventos</h2>
-      {ev.map((e) => <TarjetaEvento key={e.id} ev={e} alternar={() => alternar(e)} />)}
+      {ev.map((e) => <TarjetaEvento key={e.id} ev={e} alternar={() => alternar(e)} irAEntrada={irAEntrada} />)}
       <Msg m={msg} />
     </>
   )
 }
 
-function TarjetaEvento({ ev, alternar }) {
+function TarjetaEvento({ ev, alternar, irAEntrada }) {
   const f = new Date(ev.fecha)
   const dia = f.toLocaleDateString('es-AR', { day: 'numeric', timeZone: ZONA })
   const mes = f.toLocaleDateString('es-AR', { month: 'short', timeZone: ZONA }).replace('.', '')
@@ -461,10 +467,12 @@ function TarjetaEvento({ ev, alternar }) {
             {ev.anotado ? 'Cancelar inscripción' : 'Anotarme'}
           </button>
         )}
+        {ev.entrada_pesos != null && (
+          <button className="btn pri" disabled={quedan === 0} onClick={() => irAEntrada(ev.id)}>
+            {quedan === 0 ? 'Agotado' : 'Comprar ticket · $ ' + fmt(ev.entrada_pesos)}
+          </button>
+        )}
       </div>
-      {ev.entrada_pesos != null && (
-        <p className="mu">Entrada: {'$ ' + fmt(ev.entrada_pesos)}{ev.entrada_puntos != null ? ' o ' + fmt(ev.entrada_puntos) + ' pts' : ''}. Comprala en la solapa Canjes.</p>
-      )}
       {ev.entrada_pesos == null && ev.anotado && <p className="msg ok">Estás anotado en este evento.</p>}
     </>
   )

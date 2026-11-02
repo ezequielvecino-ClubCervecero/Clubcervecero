@@ -13,6 +13,7 @@ import Movimientos from './Movimientos'
 import TiendaControl from '../TiendaControl'
 import { FichaEscaneo, EntradasPorCobrar, EntradasEvento } from '../Entradas'
 import ProductoPlegable from '../ProductoPlegable'
+import { WA_BASE, WA_ETIQUETAS, textosWa } from '../whatsapp'
 
 const etiqueta = (s) => `N.º ${String(s.numero_socio).padStart(4, '0')} - ${[s.nombre, s.apellido].filter(Boolean).join(' ') || 'Sin nombre'}`
 
@@ -633,6 +634,12 @@ function Marca({ marca, onGuardado }) {
   })
   const [msg, setMsg] = useState(null)
   const [subiendo, setSubiendo] = useState('')
+  const [wa, setWa] = useState(() => textosWa(marca.wa_textos))
+  async function guardarWa(e) {
+    e.preventDefault()
+    setMsg(null)
+    if (await actualizar({ wa_textos: wa })) setMsg({ tipo: 'ok', texto: 'Mensaje de WhatsApp guardado.' })
+  }
 
   async function actualizar(cambios) {
     const { error } = await supabase.from('configuracion')
@@ -645,7 +652,7 @@ function Marca({ marca, onGuardado }) {
   const TEMAS = [['violeta', 'Violeta (el de siempre)'], ['claro', 'Claro'], ['oscuro', 'Oscuro']]
   async function elegirTema(t) {
     setMsg(null)
-    if (await actualizar({ tema: t })) setMsg({ tipo: 'ok', texto: 'Tema cambiado: ya lo ven todos los socios.' })
+    if (await actualizar({ tema: t })) setMsg({ tipo: 'ok', texto: 'Tema predeterminado cambiado.' })
   }
 
   async function guardarTextos(e) {
@@ -678,14 +685,31 @@ function Marca({ marca, onGuardado }) {
   return (
     <>
       <div className="card">
-        <h3>Tema de color</h3>
-        <p className="mu">Cambia el aspecto de toda la app para todos los socios, productores y el personal. Podés volver al violeta cuando quieras.</p>
+        <h3>Tema de color predeterminado</h3>
+        <p className="mu">Es el tema que ve cada persona hasta que elija el suyo desde sus preferencias. Podés volver al violeta cuando quieras.</p>
         <div className="chips chips-parejos">
           {TEMAS.map(([id, nombre]) => (
             <button key={id} type="button" className={'chip' + ((marca.tema || 'violeta') === id ? ' on' : '')} onClick={() => elegirTema(id)}>{nombre}</button>
           ))}
         </div>
       </div>
+      <form className="card" onSubmit={guardarWa}>
+        <h3>Mensaje de WhatsApp de los pedidos</h3>
+        <p className="mu">Las palabras fijas del mensaje que se arma al comprar en la tienda. Es el mismo texto para el club y para los productores. Los datos del pedido (qué compró, total, dirección) los arma la app sola.</p>
+        {Object.keys(WA_BASE).map((k) => (
+          <div key={k}>
+            <label htmlFor={'wa-' + k}>{WA_ETIQUETAS[k]}</label>
+            <input id={'wa-' + k} value={wa[k]} onChange={(e) => setWa({ ...wa, [k]: e.target.value })} />
+          </div>
+        ))}
+        <p className="mu" style={{ marginTop: 10, whiteSpace: 'pre-line' }}>
+          <b>Así se ve:</b>{'\n'}{wa.saludo.replace('{numero}', '123')}{'\n'}{wa.socio} 0001 - Nombre{'\n'}• 2 x Producto - $ 5.000{'\n'}{wa.total} $ 10.000{'\n'}{wa.pago} Efectivo{'\n'}{wa.retiro}{wa.cierre.trim() ? '\n\n' + wa.cierre.trim() : ''}
+        </p>
+        <div className="row" style={{ marginTop: 10 }}>
+          <button type="button" className="btn" onClick={() => setWa({ ...WA_BASE })}>Volver al texto original</button>
+          <button className="btn pri">Guardar mensaje</button>
+        </div>
+      </form>
       <form className="card" onSubmit={guardarTextos}>
         <h3>Datos del negocio</h3>
         <label htmlFor="m-nombre">Nombre de la aplicación</label>

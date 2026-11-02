@@ -102,7 +102,7 @@ function Entrada({ e, onCambio }) {
   )
 }
 
-function Comprar({ onCambio }) {
+function Comprar({ onCambio, destacado }) {
   const [lista, setLista] = useState(null)
   const [sel, setSel] = useState({}) // por evento: { pago, cantidad }
   const [msg, setMsg] = useState(null)
@@ -129,14 +129,15 @@ function Comprar({ onCambio }) {
 
   if (lista === null) return <p className="mu">Cargando...</p>
   if (lista.length === 0) return <p className="mu">Por ahora no hay entradas a la venta.</p>
+  const ordenada = [...lista].sort((a, b) => (b.id === destacado) - (a.id === destacado))
   return (
     <>
-      {lista.map((ev) => {
+      {ordenada.map((ev) => {
         const { pago, cantidad } = de(ev.id)
         const quedan = ev.cupos == null ? null : Math.max(0, ev.cupos - ev.vendidas)
         const total = pago === 'puntos' ? fmt(Number(ev.entrada_puntos) * cantidad) + ' pts' : pesos(Number(ev.entrada_pesos) * cantidad)
         return (
-          <div key={ev.id} className="card">
+          <div key={ev.id} className="card" style={ev.id === destacado ? { borderColor: 'var(--am)' } : undefined}>
             <b>{ev.titulo}</b>
             <p className="mu">{fechaLarga(ev.fecha)}</p>
             {ev.descripcion && <p className="mu">{ev.descripcion}</p>}
@@ -190,9 +191,9 @@ function Movimientos({ version }) {
 }
 
 // Sección de Canjes: mis entradas, comprar y movimientos.
-export function EntradasSocio({ onSaldo }) {
+export function EntradasSocio({ onSaldo, eventoCompra }) {
   const [entradas, setEntradas] = useState(null)
-  const [abierta, setAbierta] = useState(null)
+  const [abierta, setAbierta] = useState(eventoCompra ? 'comprar' : null)
   const [version, setVersion] = useState(0)
   const [msg, setMsg] = useState(null)
 
@@ -221,7 +222,7 @@ export function EntradasSocio({ onSaldo }) {
         {(entradas || []).map((e) => <Entrada key={e.id} e={e} onCambio={cambio} />)}
       </Acordeon>
       <Acordeon titulo="Comprar entradas" icono="gift" abierto={abierta === 'comprar'} onToggle={() => alternar('comprar')}>
-        <Comprar onCambio={cambio} />
+        <Comprar onCambio={cambio} destacado={eventoCompra} />
       </Acordeon>
       <Acordeon titulo="Movimientos de entradas" icono="crown" abierto={abierta === 'movs'} onToggle={() => alternar('movs')}>
         <Movimientos version={version} />
