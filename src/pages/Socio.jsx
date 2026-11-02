@@ -449,32 +449,32 @@ function TarjetaEvento({ ev, alternar, irAEntrada }) {
   const f = new Date(ev.fecha)
   const dia = f.toLocaleDateString('es-AR', { day: 'numeric', timeZone: ZONA })
   const mes = f.toLocaleDateString('es-AR', { month: 'short', timeZone: ZONA }).replace('.', '')
-  const hora = f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: ZONA })
+  const hora = f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: ZONA })
   const quedan = ev.cupos == null ? null : Math.max(0, ev.cupos - Number(ev.inscriptos))
   const cupos = quedan === null ? '' : quedan === 0 ? 'Cupos agotados' : quedan <= 5 ? 'Quedan pocos cupos (' + quedan + ')' : 'Cupos disponibles: ' + quedan
 
   return (
-    <>
-      <div className="card row" style={{ flexWrap: 'nowrap', gap: 12 }}>
+    <div className="card">
+      <div className="row" style={{ flexWrap: 'nowrap', gap: 12, alignItems: 'flex-start', justifyContent: 'flex-start' }}>
         <div className="fecha-evento"><b>{dia}</b><span>{mes}</span></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <b>{ev.titulo}</b>
           <p className="mu">{hora} h{cupos ? ' · ' + cupos : ''}</p>
           {ev.descripcion && <p className="mu">{ev.descripcion}</p>}
         </div>
-        {ev.entrada_pesos == null && (
-          <button className="btn" disabled={!ev.anotado && quedan === 0} onClick={alternar}>
-            {ev.anotado ? 'Cancelar inscripción' : 'Anotarme'}
-          </button>
-        )}
-        {ev.entrada_pesos != null && (
-          <button className="btn pri" disabled={quedan === 0} onClick={() => irAEntrada(ev.id)}>
-            {quedan === 0 ? 'Agotado' : 'Comprar ticket · $ ' + fmt(ev.entrada_pesos)}
-          </button>
-        )}
       </div>
+      {ev.entrada_pesos == null && (
+        <button className="btn" style={{ width: '100%', marginTop: 12 }} disabled={!ev.anotado && quedan === 0} onClick={alternar}>
+          {ev.anotado ? 'Cancelar inscripción' : 'Anotarme'}
+        </button>
+      )}
+      {ev.entrada_pesos != null && (
+        <button className="btn pri" style={{ width: '100%', marginTop: 12 }} disabled={quedan === 0} onClick={() => irAEntrada(ev.id)}>
+          {quedan === 0 ? 'Agotado' : 'Comprar ticket · $ ' + fmt(ev.entrada_pesos)}
+        </button>
+      )}
       {ev.entrada_pesos == null && ev.anotado && <p className="msg ok">Estás anotado en este evento.</p>}
-    </>
+    </div>
   )
 }
 
