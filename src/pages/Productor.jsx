@@ -3,14 +3,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import MiUsuario from '../MiUsuario'
 import Reloj from '../Reloj'
-import { Msg, Navegacion, fmt, fechaHora, cap, imprimirTicket } from '../ui'
+import { Msg, Acordeon, Navegacion, fmt, plata, fechaHora, cap, imprimirTicket } from '../ui'
 import { subirImagenProducto } from '../imagenes'
 import TiendaControl from '../TiendaControl'
 import { CamposProducto } from './Panel'
+import { datosPromo } from '../promos'
 import ProductoPlegable from '../ProductoPlegable'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
-const pesos = (n) => '$ ' + fmt(n)
+const pesos = (n) => '$ ' + plata(n)
 const ESTADOS = {
   pendiente: ['warn', 'Pendiente'], aceptado: ['warn', 'En proceso'], confirmado: ['ok', 'Entregado'],
   no_entregado: ['bad', 'No entregado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta'], cancelado: ['bad', 'Cancelado'],
@@ -159,6 +160,8 @@ function Inicio({ perfil, inicio, error, irA }) {
 function Pedidos({ pedidos, resumen, datos, error, recargar }) {
   const [msg, setMsg] = useState(null)
   const [ahora, setAhora] = useState(Date.now())
+  const [verAnteriores, setVerAnteriores] = useState(false)
+  const [cuantos, setCuantos] = useState(10)
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 20000)
     return () => clearInterval(t)
@@ -250,9 +253,9 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
         )
       })}
 
-      <h2>Anteriores</h2>
+      <Acordeon titulo={'Anteriores (' + anteriores.length + ')'} icono="pint" abierto={verAnteriores} onToggle={() => { setVerAnteriores(!verAnteriores); setCuantos(10) }}>
       {anteriores.length === 0 && <p className="mu">Todavía no cerraste pedidos.</p>}
-      {anteriores.map((p) => {
+      {anteriores.slice(0, cuantos).map((p) => {
         const [clase, texto] = ESTADOS[p.estado] || ['bad', p.estado]
         return (
           <div key={p.id} className="card">
@@ -262,6 +265,12 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
           </div>
         )
       })}
+      {cuantos < anteriores.length && (
+        <button type="button" className="btn" style={{ width: '100%' }} onClick={() => setCuantos(cuantos + 10)}>
+          Ver más ({anteriores.length - cuantos} restantes)
+        </button>
+      )}
+      </Acordeon>
     </>
   )
 }
@@ -275,6 +284,7 @@ const datosProducto = (r) => ({
   precio_pesos: Number(r.precio_pesos),
   stock: Math.max(0, Math.floor(Number(r.stock || 0))),
   imagen_url: r.imagen_url || null,
+  ...datosPromo(r),
 })
 
 function Productos({ perfil, datos, oculto }) {

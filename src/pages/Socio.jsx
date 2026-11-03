@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { QRCodeSVG } from 'qrcode.react'
-import { Icon, Coin, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, fechaHora, TIPOS } from '../ui'
+import { Icon, Coin, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, plata, fechaHora, TIPOS } from '../ui'
 import Tienda from './Tienda'
 import Puesto from '../Puesto'
 import { MisDirecciones } from '../Direcciones'
@@ -470,7 +470,7 @@ function TarjetaEvento({ ev, alternar, irAEntrada }) {
       )}
       {ev.entrada_pesos != null && (
         <button className="btn pri" style={{ width: '100%', marginTop: 12 }} disabled={quedan === 0} onClick={() => irAEntrada(ev.id)}>
-          {quedan === 0 ? 'Agotado' : 'Comprar ticket · $ ' + fmt(ev.entrada_pesos)}
+          {quedan === 0 ? 'Agotado' : 'Comprar ticket · $ ' + plata(ev.entrada_pesos)}
         </button>
       )}
       {ev.entrada_pesos == null && ev.anotado && <p className="msg ok">Estás anotado en este evento.</p>}

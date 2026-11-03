@@ -2,11 +2,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from './supabaseClient'
-import { Msg, Acordeon, fmt } from './ui'
+import { Msg, Acordeon, fmt, plata } from './ui'
 
 const ZONA = 'America/Argentina/Buenos_Aires'
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
-const pesos = (n) => '$ ' + fmt(n)
+const pesos = (n) => '$ ' + plata(n)
 const fechaLarga = (ts) => new Date(ts).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: ZONA })
 const fechaCorta = (ts) => new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: ZONA })
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { fmt, fechaHora, TIPOS } from '../ui'
+import { fmt, plata, fechaHora, TIPOS } from '../ui'
 
 export default function Movimientos({ socios }) {
   const [vista, setVista] = useState('puntos')
@@ -50,7 +50,7 @@ function MovimientosDinero({ socios }) {
                 <td>N.º {String(r.socio_numero).padStart(4, '0')} - {r.socio_nombre || 'Sin nombre'}</td>
                 <td>{r.origen}</td>
                 <td className="mu">{r.detalle}{r.estado === 'pendiente' ? ' (sin cobrar)' : ''}</td>
-                <td>{Number(r.pesos) > 0 ? '$ ' + fmt(r.pesos) : '-'}</td>
+                <td>{Number(r.pesos) > 0 ? '$ ' + plata(r.pesos) : '-'}</td>
                 <td>{Number(r.puntos) > 0 ? fmt(r.puntos) : '-'}</td>
                 <td className="mu">{r.pago}</td>
               </tr>

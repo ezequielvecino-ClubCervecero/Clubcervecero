@@ -5,7 +5,8 @@ import { supabase } from '../supabaseClient'
 import { MiUsuarioPropio } from '../MiUsuario'
 import Reloj from '../Reloj'
 import Usuarios from '../Usuarios'
-import { Icon, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
+import { PromosEditor, datosPromo, textoPromoItem } from '../promos'
+import { Icon, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, plata, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
 import MasVendidos from '../MasVendidos'
 import { subirImagenProducto } from '../imagenes'
@@ -742,7 +743,7 @@ function Marca({ marca, onGuardado }) {
 }
 
 const PAGO_TXT = { efectivo: 'Efectivo en el local', transferencia: 'Transferencia', puntos: 'Puntos' }
-const pesos = (n) => '$ ' + fmt(n)
+const pesos = (n) => '$ ' + plata(n)
 
 function Cobros({ onCambio, esAdmin }) {
   const [pagos, setPagos] = useState([])
@@ -829,7 +830,7 @@ function Cobros({ onCambio, esAdmin }) {
             <div className="row"><b>Pedido N.º {p.numero}</b><span className="mu">{fechaHora(p.creado_en)}</span></div>
             <Reloj creado={p.creado_en} />
             <p>{quien(p)}</p>
-            {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+            {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}{textoPromoItem(i)}</p>)}
             <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
             <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}</p>
             <div className="row" style={{ marginTop: 10 }}>
@@ -852,7 +853,7 @@ function Cobros({ onCambio, esAdmin }) {
           <div key={p.id} className="card">
             <div className="row"><b>Pedido N.º {p.numero}</b><span className="pill warn">{p.entrega === 'envio' ? 'Envío en proceso' : 'Listo para retirar'}</span></div>
             <p>{quien(p)}</p>
-            {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+            {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}{textoPromoItem(i)}</p>)}
             <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos)}</p>
             <p className="mu">Pago: {PAGO_TXT[p.pago]} · {p.entrega === 'envio' ? 'Envío a ' + p.direccion : 'Retiro en el local'}. Al marcar entregado se cobra, se descuentan los puntos y cuenta en la facturación.</p>
             <div className="row" style={{ marginTop: 10 }}>
@@ -913,6 +914,7 @@ export function CamposProducto({ r, set, secciones, formatos = [], estilos = [],
         <input id={id + '-i'} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { onImagen(e.target.files[0]); e.target.value = '' }} />
         {r.imagen_url && <div style={{ marginTop: 8 }}><button type="button" className="btn" onClick={() => set('imagen_url', null)}>Quitar imagen</button></div>}
       </div>
+      <PromosEditor r={r} set={set} id={id} />
       <div style={{ gridColumn: '1 / -1' }}>
         <label htmlFor={id + '-d'}>Descripción (opcional, por ejemplo qué incluye el combo)</label>
         <input id={id + '-d'} value={r.descripcion ?? ''} onChange={(e) => set('descripcion', e.target.value)} />
@@ -1121,6 +1123,7 @@ function TiendaAdmin() {
     precio_pesos: Number(r.precio_pesos),
     stock: Math.max(0, Math.floor(Number(r.stock || 0))),
     imagen_url: r.imagen_url || null,
+    ...datosPromo(r),
   })
 
   async function cambiarImagen(archivo, alSubir) {
@@ -1280,7 +1283,7 @@ function Facturacion() {
           {p.pedido_items.map((i) => (
             <div key={i.id} className="row" style={{ marginTop: 4 }}>
               <span>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</span>
-              <span className="mu">{p.pago === 'puntos' && i.precio_puntos != null ? fmt(i.precio_puntos * i.cantidad) + ' pts' : pesos(i.precio_pesos * i.cantidad)}</span>
+              <span className="mu">{p.pago === 'puntos' && i.precio_puntos != null ? fmt(i.precio_puntos * i.cantidad) + ' pts' : pesos(i.precio_pesos * i.cantidad - Number(i.descuento_pesos || 0))}{Number(i.descuento_pesos) > 0 ? ' (' + (i.promo || 'promo') + ')' : ''}</span>
             </div>
           ))}
           <div className="row" style={{ marginTop: 8 }}>

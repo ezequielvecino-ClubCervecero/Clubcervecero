@@ -1,7 +1,8 @@
 // Tienda del socio: secciones, carrito, pedido y mensaje de WhatsApp.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { Icon, Msg, Acordeon, fmt, fechaHora } from '../ui'
+import { PromosProducto, descuentoLinea, vigente, etiquetaPromo, textoPromoItem } from '../promos'
+import { Icon, Msg, Acordeon, fmt, plata, fechaHora } from '../ui'
 import Reloj from '../Reloj'
 import { textosWa } from '../whatsapp'
 import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
@@ -9,7 +10,7 @@ import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
 const PAGO_TXT = Object.fromEntries(PAGOS)
 const ENTREGAS = [['retiro', 'Retiro en el local'], ['envio', 'Envío a domicilio']]
-const pesos = (n) => '$ ' + fmt(n)
+const pesos = (n) => '$ ' + plata(n)
 const ESTADOS = { pendiente: ['warn', 'En espera de confirmación'], confirmado: ['ok', 'Entregado'], no_entregado: ['bad', 'No entregado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
 // Cervecería de cada producto: la del productor, o el nombre del club (se edita en Marca).
 const cerveceriaDe = (p, club) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : club || 'Club Cervecero')
@@ -21,9 +22,11 @@ function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, mapa, 
   L.push(T.socio + ' ' + String(perfil.numero_socio).padStart(4, '0') + (perfil.nombre ? ' - ' + perfil.nombre : ''))
   L.push('')
   lineas.forEach((l) => {
-    const precio = pago === 'puntos' ? fmt(l.precio_puntos * l.cantidad) + ' pts' : pesos(l.precio_pesos * l.cantidad)
-    L.push('• ' + l.cantidad + ' x ' + l.nombre + (l.formato ? ' (' + l.formato + ')' : '') + ' - ' + precio)
+    const precio = pago === 'puntos' ? fmt(l.precio_puntos * l.cantidad) + ' pts' : pesos(l.precio_pesos * l.cantidad - l.desc)
+    L.push('• ' + l.cantidad + ' x ' + l.nombre + (l.formato ? ' (' + l.formato + ')' : '') + ' - ' + precio + (l.desc > 0 ? ' (' + etiquetaPromo(l.promoTipo, l) + ')' : ''))
   })
+  const gratis = entrega === 'envio' ? lineas.filter((l) => l.deliveryGratis) : []
+  if (gratis.length > 0) L.push('Envío sin costo (promo Delivery gratis: ' + gratis.map((l) => l.nombre).join(', ') + ')')
   L.push('')
   L.push(T.total + ' ' + (pago === 'puntos' ? fmt(totalPuntos) + ' puntos' : pesos(totalPesos)))
   L.push(T.pago + ' ' + PAGO_TXT[pago])
@@ -56,6 +59,12 @@ export default function Tienda({ perfil }) {
   const [abierta, setAbierta] = useState(false)
   const [version, setVersion] = useState(0)
   const [tiendas, setTiendas] = useState({})
+  const [ahora, setAhora] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 15000)
+    return () => clearInterval(t)
+  }, [])
+  const alVencer = useCallback(() => setAhora(Date.now()), [])
 
   const cargar = useCallback(async () => {
     const [s, p, c, sd, et] = await Promise.all([
@@ -102,8 +111,13 @@ export default function Tienda({ perfil }) {
     })
   }, [abiertos])
 
-  const lineas = abiertos.filter((p) => carrito[p.id]).map((p) => ({ ...p, cantidad: carrito[p.id] }))
-  const totalPesos = lineas.reduce((a, l) => a + l.precio_pesos * l.cantidad, 0)
+  const lineas = abiertos.filter((p) => carrito[p.id]).map((p) => {
+    const d = descuentoLinea(p, carrito[p.id], pago, ahora)
+    return { ...p, cantidad: carrito[p.id], desc: d.monto, promoTipo: d.tipo, deliveryGratis: vigente(p, 'delivery', ahora) }
+  })
+  const promoSinPuntos = pago === 'puntos' && abiertos.some((p) => carrito[p.id] && (vigente(p, 'pct', ahora) || vigente(p, '2x1', ahora)))
+  const totalPesos = lineas.reduce((a, l) => a + l.precio_pesos * l.cantidad - l.desc, 0)
+  const hayDeliveryGratis = lineas.some((l) => l.deliveryGratis)
   const sePuedePuntos = lineas.length > 0 && lineas.every((l) => l.precio_puntos != null)
   const totalPuntos = sePuedePuntos ? lineas.reduce((a, l) => a + l.precio_puntos * l.cantidad, 0) : 0
   const puntosOk = sePuedePuntos && saldo >= totalPuntos
@@ -227,7 +241,10 @@ export default function Tienda({ perfil }) {
             {seccion === 'todos' && nombreSeccion[p.seccion] && <p className="mu">{nombreSeccion[p.seccion]}</p>}
             <p className="mu">Cervecería: <b>{cerveceriaDe(p, config.cerveceria_club)}</b></p>
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
-            <p>{pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
+            <PromosProducto p={p} ahora={ahora} onFin={alVencer} />
+            <p>{vigente(p, 'pct', ahora) && !vigente(p, '2x1', ahora)
+              ? <><s className="mu">{pesos(p.precio_pesos)}</s> <b>{pesos(Math.round(p.precio_pesos * (100 - Number(p.promo_pct))) / 100)}</b></>
+              : pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
             {p.stock <= 5 && <p className="mu">Quedan {p.stock}</p>}
             </div>
           </div>
@@ -244,9 +261,20 @@ export default function Tienda({ perfil }) {
           <h3>Tu pedido</h3>
           {vendedores > 1 && <p className="mu">Tu carrito tiene productos de {vendedores} cervecerías: se hacen {vendedores} pedidos separados y cada cervecería confirma el suyo.</p>}
           {lineas.map((l) => (
-            <div key={l.id} className="row" style={{ marginTop: 6 }}>
-              <span>{l.cantidad} × {l.nombre}{l.formato ? ' (' + l.formato + ')' : ''}</span>
-              <span>{pago === 'puntos' && l.precio_puntos != null ? fmt(l.precio_puntos * l.cantidad) + ' pts' : pesos(l.precio_pesos * l.cantidad)}</span>
+            <div key={l.id} style={{ marginTop: 6 }}>
+              <div className="row">
+                <span>{l.cantidad} × {l.nombre}{l.formato ? ' (' + l.formato + ')' : ''}</span>
+                <span>{pago === 'puntos' && l.precio_puntos != null ? fmt(l.precio_puntos * l.cantidad) + ' pts' : pesos(l.precio_pesos * l.cantidad - l.desc)}</span>
+              </div>
+              {l.desc > 0 && (
+                <p className="mu" style={{ fontSize: 13 }}>
+                  {etiquetaPromo(l.promoTipo, l)}: ahorrás {pesos(l.desc)}
+                  {l.promoTipo === '2x1' ? ' (' + Math.floor(l.cantidad / 2) + (Math.floor(l.cantidad / 2) === 1 ? ' unidad va gratis)' : ' unidades van gratis)') : ''}
+                </p>
+              )}
+              {l.promoTipo === null && pago !== 'puntos' && vigente(l, '2x1', ahora) && l.cantidad < 2 && (
+                <p className="mu" style={{ fontSize: 13 }}>2x1: agregá una unidad más y una va gratis.</p>
+              )}
             </div>
           ))}
           <label>Forma de pago</label>
@@ -255,6 +283,7 @@ export default function Tienda({ perfil }) {
               <button key={id} className={'chip' + (pago === id ? ' on' : '')} onClick={() => setPago(id)}>{t}</button>
             ))}
           </div>
+          {promoSinPuntos && <p className="msg error">Con puntos no aplica la promoción: se paga el precio normal.</p>}
           {pago === 'puntos' && !pagoValido && (
             <p className="msg error">
               {!sePuedePuntos ? 'Algún producto del pedido no se puede pagar con puntos.' : 'Te faltan ' + fmt(totalPuntos - saldo) + ' puntos de saldo disponible.'}
@@ -286,6 +315,7 @@ export default function Tienda({ perfil }) {
                 </>
               )}
               {coordsFinal && <p className="mu" style={{ marginTop: 6 }}>Se va a mandar también el link de Google Maps con tu ubicación.</p>}
+              {hayDeliveryGratis && <p className="msg ok" style={{ marginTop: 6 }}>Delivery gratis: {lineas.filter((l) => l.deliveryGratis).map((l) => l.nombre).join(', ')}. El envío de esos productos no tiene costo.</p>}
               {config.aviso_envio && <p className="mu" style={{ marginTop: 6 }}>{config.aviso_envio}</p>}
             </>
           )}
@@ -329,7 +359,7 @@ function MisPedidos({ perfil, version, club }) {
         <p className="mu">{fechaHora(p.creado_en)} · {PAGO_TXT[p.pago]}</p>
         {p.estado === 'pendiente' && <Reloj creado={p.creado_en} />}
         <p className="mu">Cervecería: {p.productor_id ? (p.productores && p.productores.cerveceria) || '-' : club || 'Club Cervecero'}</p>
-        {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)}
+        {p.pedido_items.map((i) => <p key={i.id}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}{textoPromoItem(i)}</p>)}
         <p className="pts" style={{ marginTop: 6 }}>{p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts' : pesos(p.total_pesos)}</p>
       </div>
     )

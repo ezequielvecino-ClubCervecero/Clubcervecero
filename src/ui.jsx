@@ -2,6 +2,13 @@
 export const fmt = (n) =>
   Number(n ?? 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+// Precios en pesos: sin centavos si son redondos ($ 1.000) y con decimales solo si hay centavos ($ 1.250,50). Los puntos siguen con fmt.
+export const plata = (n) => {
+  const v = Number(n ?? 0)
+  const redondo = Math.abs(v - Math.round(v)) < 0.005
+  return (redondo ? Math.round(v) : v).toLocaleString('es-AR', { minimumFractionDigits: redondo ? 0 : 2, maximumFractionDigits: redondo ? 0 : 2 })
+}
+
 export const fechaHora = (s) =>
   new Date(s).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 
@@ -88,7 +95,7 @@ export function Categoria({ valor }) {
 export const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
-const $ = (n) => '$ ' + fmt(n)
+const $ = (n) => '$ ' + plata(n)
 const mes = (iso) => cap(new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))
 
 // Abre una hoja limpia lista para imprimir o "Guardar como PDF" desde el navegador.

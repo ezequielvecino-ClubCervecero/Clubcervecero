@@ -1,5 +1,5 @@
 // Tarjeta de producto minimizada: nombre, precio y stock; al tocarla se abre para editar.
-import { fmt } from './ui'
+import { plata, fmt } from './ui'
 
 export default function ProductoPlegable({ r, abierto, onToggle, children }) {
   return (
@@ -10,7 +10,7 @@ export default function ProductoPlegable({ r, abierto, onToggle, children }) {
           <b>{r.nombre || 'Sin nombre'}</b>
           {!r.activo && <span className="mu"> · Oculto</span>}
         </span>
-        <span className="mu" style={{ whiteSpace: 'nowrap' }}>$ {fmt(r.precio_pesos || 0)} · Stock {r.stock === '' || r.stock == null ? '-' : r.stock}</span>
+        <span className="mu" style={{ whiteSpace: 'nowrap' }}>$ {plata(r.precio_pesos || 0)} · Stock {r.stock === '' || r.stock == null ? '-' : r.stock}</span>
         <span aria-hidden="true">{abierto ? '▴' : '▾'}</span>
       </button>
       {abierto && <div style={{ marginTop: 12 }}>{children}</div>}
