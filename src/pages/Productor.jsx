@@ -11,6 +11,9 @@ import { datosPromo } from '../promos'
 import ProductoPlegable from '../ProductoPlegable'
 import EscanerProductor from '../EscanerProductor'
 import AvisosProductor from '../AvisosProductor'
+import { QrIdentificacion } from '../Entradas'
+import { textoPresentismo } from '../FichaProductor'
+import { AvisosRecordatorio } from '../AvisosActivar'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + plata(n)
@@ -107,6 +110,8 @@ function Semaforo({ g, filtro, onElegir }) {
 // Lo primero que ve el productor: avisos, tienda, resumen del mes y eventos.
 function Inicio({ perfil, inicio, error, irA, pedidos, datos, periodo, irAPedidos }) {
   const [eventos, setEventos] = useState([])
+  const [presen, setPresen] = useState(null)
+  useEffect(() => { supabase.rpc('presentismo_productor').then(({ data }) => setPresen(data || null)) }, [])
   useEffect(() => {
     supabase.from('eventos_productores').select('*').gte('fecha', new Date().toISOString()).order('fecha')
       .then(({ data }) => setEventos(data || []))
@@ -132,7 +137,10 @@ function Inicio({ perfil, inicio, error, irA, pedidos, datos, periodo, irAPedido
 
   return (
     <>
-      <div className="member">
+      <AvisosRecordatorio />
+      <div className="member" style={{ position: 'relative' }}>
+        <QrIdentificacion codigo={perfil.codigo_qr} prefijo="PRO-" etiqueta="productor" />
+        <div style={{ paddingRight: 112 }}>
         <p className="mu" style={{ margin: 0 }}>Cervecería</p>
         <h2 style={{ margin: '2px 0 8px' }}>{(datos && datos.cerveceria) || 'Sin nombre cargado'}</h2>
         <p style={{ margin: '4px 0' }}><span className="pill ok">Productor</span></p>
@@ -140,6 +148,8 @@ function Inicio({ perfil, inicio, error, irA, pedidos, datos, periodo, irAPedido
         <p className="mu">{[perfil.nombre, perfil.apellido].filter(Boolean).join(' ') || 'Sin nombre'}</p>
         {perfil.usuario && <p className="mu">Usuario: {perfil.usuario}</p>}
         {datos && datos.whatsapp && <p className="mu">WhatsApp: {datos.whatsapp}</p>}
+        {presen && <p className="mu">Presentismo: {textoPresentismo(presen)}</p>}
+        </div>
         <Semaforo g={grupos(pedidos || [], periodo)} filtro={null} onElegir={irAPedidos} />
         <p className="mu" style={{ fontSize: 12 }}>Entregados y cancelados: de este mes. Pendientes: todos los que esperan respuesta o entrega.</p>
       </div>
@@ -471,6 +481,8 @@ function QuedaApp({ inicio }) {
 // Rendición mensual: porcentaje pactado sobre el ingreso, menos el valor de los puntos obtenidos.
 function Cuenta({ perfil, inicio, datos }) {
   const [tickets, setTickets] = useState(null)
+  const [presen, setPresen] = useState(null)
+  useEffect(() => { supabase.rpc('presentismo_productor').then(({ data }) => setPresen(data || null)) }, [])
   useEffect(() => {
     supabase.from('rendiciones_productor').select('*').eq('productor_id', perfil.id)
       .order('periodo', { ascending: false }).limit(12).then(({ data }) => setTickets(data || []))
@@ -484,6 +496,20 @@ function Cuenta({ perfil, inicio, datos }) {
         Si da positivo, lo pagás vos; si da negativo, te paga el club. Los puntos no se canjean aparte: se descuentan acá.
       </p>
       {inicio && <QuedaApp inicio={inicio} />}
+      <h3 style={{ marginTop: 14 }}>Presentismo en Eventos de Cerveceros</h3>
+      {presen && (
+        <div className="card">
+          <p><b>{textoPresentismo(presen)}</b></p>
+          <p className="mu">Cuentan los eventos de Cerveceros que ya pasaron y se hicieron después de tu alta. El personal te marca presente al escanear tu QR.</p>
+          {presen.detalle.length === 0 && <p className="mu">Todavía no hubo eventos desde tu alta.</p>}
+          {presen.detalle.map((e) => (
+            <div key={e.id} className="row" style={{ padding: '4px 0' }}>
+              <span>{e.titulo} <span className="mu">· {new Date(e.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: '2-digit', timeZone: ZONA })}</span></span>
+              <span className={'pill ' + (e.presente ? 'ok' : 'bad')}>{e.presente ? 'Estuviste' : 'No estuviste'}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <h3 style={{ marginTop: 14 }}>Rendiciones</h3>
       {tickets === null && <p className="mu">Cargando...</p>}
       {tickets && tickets.length === 0 && <p className="mu">Todavía no tenés rendiciones. La primera se genera el día 1 del mes siguiente.</p>}

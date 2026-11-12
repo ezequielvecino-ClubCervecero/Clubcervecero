@@ -20,6 +20,7 @@ export default function EscanerProductor() {
     setMsg(null); setCupon(null); setFicha(null)
     if (!cod) return
     if (/^SOC-/.test(cod)) return setMsg({ tipo: 'error', texto: 'Ese es un QR de socio: lo escanea el personal del local. Acá escaneá cupones de canje y entradas.' })
+    if (/^PRO-/.test(cod)) return setMsg({ tipo: 'error', texto: 'Ese es el QR de un productor: lo escanea el personal del club.' })
     if (/^PTS-/.test(cod)) return setMsg({ tipo: 'error', texto: 'Ese QR es para que los socios sumen puntos desde su app.' })
     if (/^ENT-/.test(cod)) {
       const { data, error } = await supabase.rpc('escanear_codigo', { p_codigo: cod })

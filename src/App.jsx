@@ -6,6 +6,7 @@ import Socio from './pages/Socio'
 import Panel from './pages/Panel'
 import Productor from './pages/Productor'
 import Preferencias from './Preferencias'
+import { AvisosCartel } from './AvisosActivar'
 
 const MARCA_BASE = {
   nombre_app: 'Club Cervecero',
@@ -118,6 +119,7 @@ export default function App() {
           <button className="btn" onClick={() => supabase.auth.signOut()}>Salir</button>
         </div>
       </header>
+      <AvisosCartel rol={perfil.rol} />
       {perfil.rol !== 'socio' && verPrefs && <Preferencias perfil={perfil} />}
       {perfil.rol === 'socio' && <Socio perfil={perfil} />}
       {!verPrefs && perfil.rol === 'personal' && <Panel esAdmin={false} />}

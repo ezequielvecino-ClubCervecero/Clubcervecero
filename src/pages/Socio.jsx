@@ -11,6 +11,7 @@ import { QrIdentificacion, EntradasSocio } from '../Entradas'
 import MasVendidos from '../MasVendidos'
 import Reloj from '../Reloj'
 import EscanerPuntos from '../EscanerPuntos'
+import { AvisosRecordatorio } from '../AvisosActivar'
 
 const COSTO_TRANSFERENCIA = 0.5
 const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
@@ -51,6 +52,7 @@ function Inicio({ perfil, irAEntrada }) {
 
   return (
     <>
+      <AvisosRecordatorio />
       <div className="member" style={{ position: 'relative' }}>
         <QrIdentificacion codigo={p.codigo_qr} />
         <h2 style={{ margin: 0, paddingRight: 124 }}>{[p.nombre, p.apellido].filter(Boolean).join(' ') || 'Socio'}</h2>

@@ -16,6 +16,9 @@ import { subirImagenProducto } from '../imagenes'
 import Movimientos from './Movimientos'
 import TiendaControl from '../TiendaControl'
 import { FichaEscaneo, EntradasPorCobrar, EntradasEvento } from '../Entradas'
+import FichaProductor, { textoPresentismo } from '../FichaProductor'
+import PresentesEventos from '../PresentesEventos'
+import { AvisosRecordatorio } from '../AvisosActivar'
 import ProductoPlegable from '../ProductoPlegable'
 import { WA_BASE, WA_ETIQUETAS, textosWa } from '../whatsapp'
 
@@ -78,6 +81,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
 
   return (
     <>
+      {vista === (esAdmin ? 'cobros' : 'carga') && <AvisosRecordatorio />}
       {vista === 'carga' && (!esAdmin || subCarga === 'puntos') && (
         <>
           {esAdmin && <button type="button" className="btn" style={{ marginBottom: 12 }} onClick={() => setSubCarga(null)}>← Volver a Cargar</button>}
@@ -105,7 +109,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
           {subCarga === 'novedades' && <NovedadesAdmin />}
         </>
       )}
-      {vista === 'cupon' && <Cupon />}
+      {vista === 'cupon' && <><Cupon /><PresentesEventos esAdmin={esAdmin} /></>}
       {vista === 'cobros' && <Cobros onCambio={contarPendientes} esAdmin={esAdmin} />}
       {vista === 'mov' && <Movimientos socios={socios} esAdmin={esAdmin} />}
       {vista === 'admin' && esAdmin && !sub && (
@@ -219,7 +223,7 @@ function Cupon() {
     setMsg(null)
     setCupon(null)
     setFicha(null)
-    if (/^(SOC|ENT)-/i.test(cod.trim())) {
+    if (/^(SOC|ENT|PRO)-/i.test(cod.trim())) {
       const { data: f, error: e2 } = await supabase.rpc('escanear_codigo', { p_codigo: cod })
       if (e2) return setMsg({ tipo: 'error', texto: e2.message })
       setCodigo(cod.trim().toUpperCase())
@@ -254,11 +258,12 @@ function Cupon() {
 
   return (
     <div className="card">
-      <h3>Canjear cupón o escanear socio</h3>
-      {ficha && <FichaEscaneo ficha={ficha} onCambio={() => consultar(codigo)} onVolver={limpiar} />}
+      <h3>Canjear cupón o escanear socio o productor</h3>
+      {ficha && ficha.tipo === 'productor' && <FichaProductor ficha={ficha} onCambio={() => consultar(codigo)} onVolver={limpiar} />}
+      {ficha && ficha.tipo !== 'productor' && <FichaEscaneo ficha={ficha} onCambio={() => consultar(codigo)} onVolver={limpiar} />}
       {!cupon && !ficha && (
         <>
-          <p className="mu" style={{ marginTop: 6 }}>Escaneá el QR del cupón, del socio o de una entrada, o escribí el código de 8 caracteres.</p>
+          <p className="mu" style={{ marginTop: 6 }}>Escaneá el QR del cupón, del socio, del productor o de una entrada, o escribí el código de 8 caracteres.</p>
           {escaneando
             ? <Escaner onLeido={leido} onCerrar={() => setEscaneando(false)} />
             : <button type="button" className="btn pri" style={{ marginTop: 12 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
@@ -1380,6 +1385,7 @@ function EventosCerveceros() {
         <button className="btn pri" style={{ marginTop: 16 }}>Agregar evento</button>
       </form>
       <Msg m={msg} />
+      <PresentesEventos esAdmin />
       <h2>Eventos de Cerveceros</h2>
       {lista.length === 0 && <p className="mu">Todavía no cargaste eventos.</p>}
       {lista.map((e) => (
@@ -1884,6 +1890,7 @@ function ProductoresAdmin({ club }) {
   const [per, setPer] = useState(actual)
   const [lista, setLista] = useState(null)
   const [fact, setFact] = useState({})
+  const [presen, setPresen] = useState({})
   const [rends, setRends] = useState([])
   const [clubVentas, setClubVentas] = useState(null)
   const [ventas, setVentas] = useState({})
@@ -1895,15 +1902,17 @@ function ProductoresAdmin({ club }) {
   const cargar = useCallback(async () => {
     const desde = new Date(Date.UTC(per.a, per.m, 1, 3)).toISOString()
     const hasta = new Date(Date.UTC(per.a, per.m + 1, 1, 3)).toISOString()
-    const [r, f, d, cv, cf] = await Promise.all([
+    const [r, f, d, cv, cf, pz] = await Promise.all([
       supabase.rpc('resumen_productores'),
       supabase.rpc('facturacion_productores', { p_desde: desde, p_hasta: hasta }),
       supabase.from('rendiciones_productor').select('*, productores(cerveceria)').eq('estado', 'pendiente').order('periodo'),
       supabase.from('pedidos').select('total_pesos, total_puntos, pago, valor_punto')
         .eq('estado', 'confirmado').is('productor_id', null).gte('resuelto_en', desde).lt('resuelto_en', hasta),
       supabase.from('configuracion').select('valor_punto').eq('id', 1).single(),
+      supabase.rpc('presentismo_todos'),
     ])
-    const err = r.error || f.error || d.error || cv.error || cf.error
+    const err = r.error || f.error || d.error || cv.error || cf.error || pz.error
+    setPresen(Object.fromEntries((pz.data || []).map((x) => [x.id, x.presentismo])))
     const vp = Number((cf.data && cf.data.valor_punto) || 0)
     const filasClub = cv.data || []
     setClubVentas({
@@ -2048,6 +2057,7 @@ function ProductoresAdmin({ club }) {
           <div key={pr.id} className="card">
             <div className="row"><b>{pr.cerveceria || 'Sin nombre de cervecería'}</b><span className={'pill ' + clase}>{texto}</span></div>
             <p className="mu">{pr.nombre || 'Sin nombre'} · {pr.whatsapp ? 'WhatsApp ' + pr.whatsapp : 'Sin WhatsApp cargado'}</p>
+            <p className="mu">Presentismo en Eventos de Cerveceros: <b>{textoPresentismo(presen[pr.id])}</b></p>
             <p>
               Tienda: <span className={'pill ' + (pr.tienda_abierta ? 'ok' : 'bad')}>{pr.tienda_abierta ? 'Abierta' : 'Cerrada'}</span>
               {pr.tienda_bloqueada && <span className="msg error" style={{ marginLeft: 8 }}>Se cerró sola por 3 pedidos sin respuesta</span>}

@@ -11,21 +11,21 @@ const fechaLarga = (ts) => new Date(ts).toLocaleString('es-AR', { weekday: 'long
 const fechaCorta = (ts) => new Date(ts).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: ZONA })
 
 // QR de identificación, arriba a la derecha del Inicio. Al tocarlo se agranda para mostrarlo en la puerta.
-export function QrIdentificacion({ codigo }) {
+export function QrIdentificacion({ codigo, prefijo = 'SOC-', etiqueta = 'socio' }) {
   const [grande, setGrande] = useState(false)
   if (!codigo) return null
-  const valor = 'SOC-' + codigo
+  const valor = prefijo + codigo
   return (
     <>
-      <button type="button" aria-label="Mostrar mi QR de socio" onClick={() => setGrande(true)}
+      <button type="button" aria-label={'Mostrar mi QR de ' + etiqueta} onClick={() => setGrande(true)}
         style={{ position: 'absolute', top: 14, right: 14, background: "#fff", border: 0, borderRadius: 10, padding: 6, cursor: 'pointer', lineHeight: 0 }}>
         <QRCodeSVG value={valor} size={100} />
       </button>
       {grande && (
-        <div role="dialog" aria-label="Mi QR de socio" onClick={() => setGrande(false)}
+        <div role="dialog" aria-label={'Mi QR de ' + etiqueta} onClick={() => setGrande(false)}
           style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14, padding: 20 }}>
           <div style={{ background: '#fff', padding: 16, borderRadius: 16 }}><QRCodeSVG value={valor} size={256} /></div>
-          <p style={{ color: '#fff', textAlign: 'center' }}>Mostralo en el local para que te identifiquen.<br />Tocá para cerrar.</p>
+          <p style={{ color: '#fff', textAlign: 'center' }}>Mostralo en el local para que te identifiquen o registren tu asistencia a eventos.<br />Tocá para cerrar.</p>
         </div>
       )}
     </>
