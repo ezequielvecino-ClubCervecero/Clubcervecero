@@ -30,6 +30,30 @@ export default function App() {
   }, [])
   useEffect(() => { cargarMarca() }, [cargarMarca])
   useEffect(() => { document.title = marca.nombre_app }, [marca.nombre_app])
+  // Ícono de la app elegido en Marca: pestaña, pantalla de inicio de iPhone y manifiesto de la app instalada.
+  useEffect(() => {
+    if (!marca.icono_app_url) return
+    const link = (rel) => {
+      let el = document.head.querySelector('link[rel="' + rel + '"]')
+      if (!el) { el = document.createElement('link'); el.setAttribute('rel', rel); document.head.appendChild(el) }
+      return el
+    }
+    link('icon').setAttribute('href', marca.icono_app_url)
+    link('apple-touch-icon').setAttribute('href', marca.icono_app_url)
+    const base = window.location.origin
+    const manifiesto = {
+      name: marca.nombre_app, short_name: marca.nombre_app, description: marca.descripcion,
+      start_url: base + '/', scope: base + '/', display: 'standalone', orientation: 'portrait',
+      background_color: marca.icono_fondo || '#120f1c', theme_color: '#120f1c', lang: 'es-AR',
+      icons: [
+        { src: marca.icono_app_url, sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: marca.icono_app_mask_url || marca.icono_app_url, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(manifiesto)], { type: 'application/manifest+json' }))
+    link('manifest').setAttribute('href', url)
+    return () => URL.revokeObjectURL(url)
+  }, [marca.icono_app_url, marca.icono_app_mask_url, marca.icono_fondo, marca.nombre_app, marca.descripcion])
   // Tema de color elegido por el administrador (vale para todos). Sin dato, queda el violeta de siempre.
   useEffect(() => {
     const elegido = perfil && perfil.tema ? perfil.tema : marca.tema

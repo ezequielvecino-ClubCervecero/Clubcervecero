@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient'
 import { MiUsuarioPropio } from '../MiUsuario'
 import Reloj from '../Reloj'
 import Usuarios from '../Usuarios'
+import IconosMarca from '../IconosMarca'
 import { PromosEditor, datosPromo, textoPromoItem } from '../promos'
 import { Icon, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, plata, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
@@ -725,6 +726,8 @@ function Marca({ marca, onGuardado }) {
         <input id="m-envio" value={f.aviso_envio} onChange={(e) => setF({ ...f, aviso_envio: e.target.value })} />
         <button className="btn pri" style={{ marginTop: 16 }}>Guardar</button>
       </form>
+
+      <IconosMarca marca={marca} actualizar={actualizar} setMsg={setMsg} />
 
       {logos.map(([campo, titulo]) => (
         <div key={campo} className="card">

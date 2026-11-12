@@ -9,7 +9,7 @@ self.addEventListener('push', (event) => {
   try { d = event.data ? event.data.json() : {} } catch { d = { titulo: 'Club Cervecero', cuerpo: event.data ? event.data.text() : '' } }
   event.waitUntil(self.registration.showNotification(d.titulo || 'Club Cervecero', {
     body: d.cuerpo || '',
-    icon: '/icon-192.png',
+    icon: d.icono || '/icon-192.png',
     badge: '/icon-192.png',
     tag: d.tag || undefined,
     data: { url: d.url || '/' },
