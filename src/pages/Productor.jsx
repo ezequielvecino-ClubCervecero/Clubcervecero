@@ -15,6 +15,7 @@ import { QrIdentificacion } from '../Entradas'
 import { textoPresentismo } from '../FichaProductor'
 import { AvisosRecordatorio } from '../AvisosActivar'
 import { InstalarRecordatorio } from '../InstalarApp'
+import { BotonBuscar, BotonUbicacion, linkMapas } from '../Direcciones'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + plata(n)
@@ -584,10 +585,77 @@ function Datos({ perfil, datos, onGuardado }) {
         <button className="btn pri" style={{ marginTop: 16 }}>Guardar</button>
         <Msg m={msg} />
       </form>
+      <UbicacionEnvios perfil={perfil} tieneNombre={!!(datos && datos.cerveceria && datos.cerveceria.trim())} />
       <div className="card">
         <h3>Mi usuario</h3>
         <MiUsuario actual={perfil.usuario} />
       </div>
     </>
+  )
+}
+
+// Dirección de la cervecería (oculta para los clientes salvo que se tilde mostrarla) y radio de envío.
+function UbicacionEnvios({ perfil, tieneNombre }) {
+  const [f, setF] = useState(null)
+  const [activa, setActiva] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    supabase.from('productor_ubicacion').select('*').eq('productor_id', perfil.id).maybeSingle().then(({ data }) => {
+      setF({
+        direccion: (data && data.direccion) || '',
+        lat: data && data.lat != null ? Number(data.lat) : null,
+        lng: data && data.lng != null ? Number(data.lng) : null,
+        publica: !!(data && data.direccion_publica),
+        radio: data && data.radio_envio_km != null ? String(Number(data.radio_envio_km)) : '',
+      })
+    })
+    supabase.rpc('cercania_activa').then(({ data }) => setActiva(!!data))
+  }, [perfil.id])
+
+  if (!f) return null
+
+  async function guardar(e) {
+    e.preventDefault()
+    setMsg(null)
+    const r = f.radio.trim() === '' ? null : Number(f.radio.replace(',', '.'))
+    if (r !== null && (!Number.isFinite(r) || r < 0 || r > 500)) return setMsg({ tipo: 'error', texto: 'El radio de envío tiene que ser un número entre 0 y 500 km.' })
+    if (f.direccion.trim() && f.lat == null) return setMsg({ tipo: 'error', texto: 'Tocá "Buscar dirección" o "Usar mi ubicación" para ubicar la dirección en el mapa.' })
+    if (r !== null && r > 0 && f.lat == null) return setMsg({ tipo: 'error', texto: 'Para elegir un radio de envío cargá primero tu dirección.' })
+    const { error } = await supabase.rpc('guardar_mi_ubicacion', {
+      p_direccion: f.direccion.trim() || null, p_lat: f.lat, p_lng: f.lng, p_publica: f.publica, p_radio: r,
+    })
+    setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado.' })
+  }
+
+  return (
+    <form className="card" onSubmit={guardar}>
+      <h3>Ubicación y envíos</h3>
+      <p className="mu">
+        Se usa para mostrarle a cada cliente qué tan cerca estás y hasta dónde enviás. Tu dirección <b>no se muestra</b> a los clientes: solo ven la distancia en kilómetros, salvo que actives la opción de mostrarla.
+        {activa === false && ' Por ahora el club no activó esta función; cuando la active, los datos que cargues ya van a estar listos.'}
+      </p>
+      <label htmlFor="ub-dir">Dirección de tu cervecería</label>
+      <input id="ub-dir" placeholder="Calle, número y localidad" value={f.direccion}
+        onChange={(e) => setF({ ...f, direccion: e.target.value, lat: null, lng: null })} />
+      <BotonBuscar texto={f.direccion} onResultado={(r) => setF({ ...f, direccion: r.direccion, lat: r.lat, lng: r.lng })} />
+      <BotonUbicacion onResultado={(r) => setF({ ...f, direccion: r.direccion, lat: r.lat, lng: r.lng })} />
+      {f.lat != null && <p className="mu" style={{ marginTop: 6 }}>Ubicada en el mapa. <a href={linkMapas(f.lat, f.lng)} target="_blank" rel="noreferrer">Ver en el mapa</a> (solo la ves vos).</p>}
+      {f.direccion.trim() && f.lat == null && <p className="mu" style={{ marginTop: 6 }}>Falta ubicarla: tocá Buscar dirección.</p>}
+      <label className="row" style={{ justifyContent: 'flex-start', gap: 8, marginTop: 12 }}>
+        <input type="checkbox" style={{ width: 'auto' }} checked={f.publica} disabled={!f.direccion.trim()}
+          onChange={(e) => setF({ ...f, publica: e.target.checked })} />
+        <span>Mostrar mi dirección a los clientes</span>
+      </label>
+      <label htmlFor="ub-radio" style={{ marginTop: 12 }}>Radio de envío (km)</label>
+      <input id="ub-radio" inputMode="decimal" placeholder="Vacío = sin límite · 0 = no hago envíos" value={f.radio}
+        onChange={(e) => setF({ ...f, radio: e.target.value })} />
+      <p className="mu" style={{ marginTop: 6 }}>
+        Dejalo vacío para enviar a cualquier distancia, o poné 0 si no hacés envíos. Fuera de tu radio, el cliente solo puede elegir retiro en el local. Se mide en línea recta, no por calles.
+      </p>
+      <button className="btn pri" style={{ marginTop: 16 }} disabled={!tieneNombre}>Guardar</button>
+      {!tieneNombre && <p className="mu">Primero guardá el nombre de tu cervecería arriba.</p>}
+      <Msg m={msg} />
+    </form>
   )
 }

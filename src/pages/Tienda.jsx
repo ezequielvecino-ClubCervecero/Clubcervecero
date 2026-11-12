@@ -1,11 +1,11 @@
 // Tienda del socio: secciones, carrito, pedido y mensaje de WhatsApp.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { PromosProducto, descuentoLinea, vigente, etiquetaPromo, textoPromoItem } from '../promos'
+import { PromosProducto, descuentoLinea, vigente, etiquetaPromo, textoPromoItem, hayPromo } from '../promos'
 import { Icon, Msg, Acordeon, fmt, plata, fechaHora } from '../ui'
 import Reloj from '../Reloj'
 import { textosWa } from '../whatsapp'
-import { BotonUbicacion, useDirecciones, linkMapas } from '../Direcciones'
+import { BotonUbicacion, BotonBuscar, useDirecciones, linkMapas } from '../Direcciones'
 
 const PAGOS = [['efectivo', 'Efectivo en el local'], ['transferencia', 'Transferencia'], ['puntos', 'Puntos']]
 const PAGO_TXT = Object.fromEntries(PAGOS)
@@ -14,6 +14,8 @@ const pesos = (n) => '$ ' + plata(n)
 const ESTADOS = { pendiente: ['warn', 'En espera de confirmación'], confirmado: ['ok', 'Entregado'], no_entregado: ['bad', 'No entregado'], cancelado: ['bad', 'Cancelado'], rechazado: ['bad', 'Rechazado'], vencido: ['bad', 'Sin respuesta (cancelado)'] }
 // Cervecería de cada producto: la del productor, o el nombre del club (se edita en Marca).
 const cerveceriaDe = (p, club) => (p.productor_id ? (p.productores && p.productores.cerveceria) || 'Cervecería sin nombre' : club || 'Club Cervecero')
+
+const kmTxt = (n) => (Number(n) % 1 === 0 ? String(Number(n)) : String(Number(n)).replace('.', ',')) + ' km'
 
 function armarMensaje({ numero, perfil, lineas, pago, entrega, direccion, mapa, totalPesos, totalPuntos, aviso, textos }) {
   const T = textosWa(textos)
@@ -45,7 +47,7 @@ export default function Tienda({ perfil }) {
   const [seccion, setSeccion] = useState('todos')
   const [formatoSel, setFormatoSel] = useState(null)
   const [estiloSel, setEstiloSel] = useState(null)
-  const [orden, setOrden] = useState('seccion')
+  const [orden, setOrden] = useState('cercania')
   const [carrito, setCarrito] = useState({})
   const [pago, setPago] = useState('efectivo')
   const [entrega, setEntrega] = useState('retiro')
@@ -59,6 +61,12 @@ export default function Tienda({ perfil }) {
   const [abierta, setAbierta] = useState(false)
   const [version, setVersion] = useState(0)
   const [tiendas, setTiendas] = useState({})
+  const [cercania, setCercania] = useState(false)
+  const [ubicGps, setUbicGps] = useState(null) // ubicación del celular, si la dio
+  const [msgGps, setMsgGps] = useState(null)
+  const [cerc, setCerc] = useState([]) // distancias desde la ubicación del cliente
+  const [zona, setZona] = useState(null) // radios evaluados contra la dirección de entrega
+  const [cervSel, setCervSel] = useState(null)
   const [ahora, setAhora] = useState(Date.now())
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 15000)
@@ -67,13 +75,15 @@ export default function Tienda({ perfil }) {
   const alVencer = useCallback(() => setAhora(Date.now()), [])
 
   const cargar = useCallback(async () => {
-    const [s, p, c, sd, et] = await Promise.all([
+    const [s, p, c, sd, et, ca] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
       supabase.from('tienda_productos').select('*, productores(cerveceria), tienda_formatos(nombre), tienda_estilos(nombre)').eq('activo', true).gt('stock', 0).order('nombre'),
       supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club, wa_textos').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
       supabase.rpc('estado_tiendas'),
+      supabase.rpc('cercania_activa'),
     ])
+    setCercania(!!ca.data)
     const vis = s.data || []
     setSecciones(vis)
     setProductos((p.data || []).filter((x) => vis.some((v) => v.id === x.seccion)))
@@ -130,6 +140,52 @@ export default function Tienda({ perfil }) {
   const direccionOk = entrega === 'retiro' || dirFinal.length > 4
   const vendedores = new Set(lineas.map((l) => l.productor_id || '')).size
 
+  // --- Cercanía ---
+  // Ubicación del cliente: la del celular si la dio; si no, su dirección guardada más usada que tenga mapa.
+  const dirConMapa = guardadas.find((d) => d.lat != null)
+  const ubic = ubicGps || (dirConMapa ? { lat: Number(dirConMapa.lat), lng: Number(dirConMapa.lng) } : null)
+  const ubLat = ubic ? ubic.lat : null
+  const ubLng = ubic ? ubic.lng : null
+  useEffect(() => {
+    if (!cercania) { setCerc([]); return }
+    let vivo = true
+    supabase.rpc('cervecerias_cercanas', { p_lat: ubLat, p_lng: ubLng }).then(({ data }) => { if (vivo) setCerc(data || []) })
+    return () => { vivo = false }
+  }, [cercania, ubLat, ubLng, version])
+  const cLat = coordsFinal ? coordsFinal.lat : null
+  const cLng = coordsFinal ? coordsFinal.lng : null
+  useEffect(() => {
+    if (!cercania || entrega !== 'envio' || cLat == null) { setZona(null); return }
+    let vivo = true
+    supabase.rpc('cervecerias_cercanas', { p_lat: cLat, p_lng: cLng }).then(({ data }) => { if (vivo) setZona(data || []) })
+    return () => { vivo = false }
+  }, [cercania, entrega, cLat, cLng])
+  const cercMap = useMemo(() => Object.fromEntries(cerc.map((r) => [r.productor_id, r])), [cerc])
+  const zonaMap = useMemo(() => (zona ? Object.fromEntries(zona.map((r) => [r.productor_id, r])) : null), [zona])
+  // Para cada cervecería del pedido: ¿hace envíos? ¿llega a la dirección? ¿falta saber dónde se entrega?
+  const nombreDe = (k) => { const pr = productos.find((x) => (x.productor_id || '') === k); return pr ? cerveceriaDe(pr, config.cerveceria_club) : 'La cervecería' }
+  const claves = [...new Set(lineas.map((l) => l.productor_id || ''))].filter((k) => k !== '')
+  const noEnvia = cercania ? claves.filter((k) => cercMap[k] && cercMap[k].radio_envio_km !== null && Number(cercMap[k].radio_envio_km) === 0) : []
+  const fuera = cercania ? claves.filter((k) => {
+    const r = zonaMap ? zonaMap[k] : (coordsFinal ? null : cercMap[k])
+    return r && Number(r.radio_envio_km) > 0 && r.dentro_radio === false
+  }) : []
+  const sinMapa = cercania && entrega === 'envio' && !coordsFinal
+    ? claves.filter((k) => cercMap[k] && cercMap[k].ubicada && cercMap[k].radio_envio_km !== null && Number(cercMap[k].radio_envio_km) > 0)
+    : []
+  const sinEnvio = [...new Set([...noEnvia, ...fuera])]
+  useEffect(() => { if (sinEnvio.length > 0) setEntrega((e) => (e === 'envio' ? 'retiro' : e)) }, [sinEnvio.length])
+
+  function usarGps() {
+    setMsgGps(null)
+    if (!navigator.geolocation) return setMsgGps({ tipo: 'error', texto: 'Este dispositivo no permite usar la ubicación.' })
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUbicGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => setMsgGps({ tipo: 'error', texto: err.code === 1 ? 'No diste permiso para usar la ubicación.' : 'No pude obtener la ubicación. Probá de nuevo.' }),
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
+    )
+  }
+
   async function confirmar() {
     setMsg(null)
     setEnviando(true)
@@ -137,6 +193,7 @@ export default function Tienda({ perfil }) {
     const { data, error } = await supabase.rpc('crear_pedido', {
       p_items: lineas.map((l) => ({ producto_id: l.id, cantidad: l.cantidad })),
       p_pago: pago, p_entrega: entrega, p_direccion: entrega === 'envio' ? dirFinal : null,
+      p_lat: entrega === 'envio' && coordsFinal ? coordsFinal.lat : null, p_lng: entrega === 'envio' && coordsFinal ? coordsFinal.lng : null,
     })
     setEnviando(false)
     if (error) { await cargar(); return setMsg({ tipo: 'error', texto: error.message }) }
@@ -187,19 +244,83 @@ export default function Tienda({ perfil }) {
 
   const ordenSeccion = Object.fromEntries(secciones.map((x, k) => [x.id, k]))
   const nombreSeccion = Object.fromEntries(secciones.map((x) => [x.id, x.nombre]))
-  const deSeccion = abiertos.filter((p) => seccion === 'todos' || p.seccion === seccion)
+  // Sin cercanía, "cercanía" y "promoción" no existen: se ordena por sección como siempre.
+  const ordenEf = cercania ? orden : (orden === 'cercania' || orden === 'promo' ? 'seccion' : orden)
+
+  // Cervecerías con productos publicados: abiertas primero (por cercanía o con promoción), cerradas al final.
+  const grupos = (() => {
+    const m = new Map()
+    productos.forEach((p) => {
+      const k = p.productor_id || ''
+      if (!m.has(k)) {
+        const t = tiendas[k]
+        const c = cercMap[k]
+        m.set(k, {
+          k, nombre: cerveceriaDe(p, config.cerveceria_club), abierta: !(t && t.abierta === false), promo: false,
+          dist: c && c.distancia_km != null ? Number(c.distancia_km) : null,
+          radio: c ? c.radio_envio_km : null, dentro: c ? c.dentro_radio : null, direccion: c ? c.direccion : null,
+        })
+      }
+      if (hayPromo(p, ahora)) m.get(k).promo = true
+    })
+    const dist = (g) => (g.dist == null ? 1e9 : g.dist)
+    return [...m.values()].sort((a, b) =>
+      (a.abierta === b.abierta ? 0 : a.abierta ? -1 : 1)
+      || (ordenEf === 'promo' ? (a.promo === b.promo ? 0 : a.promo ? -1 : 1) : 0)
+      || dist(a) - dist(b) || a.nombre.localeCompare(b.nombre))
+  })()
+  const rango = Object.fromEntries(grupos.map((g, i) => [g.k, i]))
+  // Si la cervecería elegida cierra mientras se mira, se vuelve a "Todas".
+  const cervEf = cervSel !== null && grupos.some((g) => g.k === cervSel && g.abierta) ? cervSel : null
+  const masCerca = grupos.find((g) => g.abierta && g.dist != null)
+  const deSeccion = abiertos.filter((p) => (seccion === 'todos' || p.seccion === seccion) && (!cercania || cervEf === null || (p.productor_id || '') === cervEf))
   // Formatos que hay en lo que se está viendo (para el filtro).
   const formatosHay = [...new Map(deSeccion.filter((p) => p.formato_id && p.tienda_formatos).map((p) => [p.formato_id, p.tienda_formatos.nombre])).entries()]
   const estilosHay = [...new Map(deSeccion.filter((p) => p.estilo_id && p.tienda_estilos).map((p) => [p.estilo_id, p.tienda_estilos.nombre])).entries()]
   const filtrados = deSeccion.filter((p) => (!formatoSel || p.formato_id === formatoSel) && (!estiloSel || p.estilo_id === estiloSel))
   const visibles = [...filtrados].sort((a, b) => {
-    if (orden === 'menor') return Number(a.precio_pesos) - Number(b.precio_pesos) || a.nombre.localeCompare(b.nombre)
-    if (orden === 'mayor') return Number(b.precio_pesos) - Number(a.precio_pesos) || a.nombre.localeCompare(b.nombre)
+    if (ordenEf === 'menor') return Number(a.precio_pesos) - Number(b.precio_pesos) || a.nombre.localeCompare(b.nombre)
+    if (ordenEf === 'mayor') return Number(b.precio_pesos) - Number(a.precio_pesos) || a.nombre.localeCompare(b.nombre)
+    if (ordenEf === 'cercania' || ordenEf === 'promo') {
+      return (rango[a.productor_id || ''] ?? 99) - (rango[b.productor_id || ''] ?? 99)
+        || (ordenEf === 'promo' ? Number(hayPromo(b, ahora)) - Number(hayPromo(a, ahora)) : 0)
+        || (ordenSeccion[a.seccion] ?? 99) - (ordenSeccion[b.seccion] ?? 99) || a.nombre.localeCompare(b.nombre)
+    }
     return (ordenSeccion[a.seccion] ?? 99) - (ordenSeccion[b.seccion] ?? 99) || a.nombre.localeCompare(b.nombre)
   })
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
+      {cercania && grupos.length > 0 && (
+        <div className="card">
+          <b>Cervecerías</b>
+          {!ubic && (
+            <>
+              <p className="mu" style={{ marginTop: 4 }}>Para verlas de la más cercana a la más lejana, dejanos usar tu ubicación (o guardá una dirección de envío con mapa).</p>
+              <button type="button" className="btn" style={{ marginTop: 8 }} onClick={usarGps}>Usar mi ubicación</button>
+              <Msg m={msgGps} />
+            </>
+          )}
+          <div className="chips" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <button type="button" className={'chip' + (cervEf === null ? ' on' : '')} style={{ textAlign: 'left' }} onClick={() => setCervSel(null)}>Todas las cervecerías</button>
+            {grupos.map((g) => (
+              <button key={g.k} type="button" className={'chip' + (cervEf === g.k ? ' on' : '')} style={{ textAlign: 'left', opacity: g.abierta ? 1 : 0.6 }}
+                disabled={!g.abierta} onClick={() => setCervSel(g.k)}>
+                <b>{g.nombre}</b>
+                {g.dist != null && g.abierta && <span> · a {kmTxt(g.dist)}</span>}
+                {!g.abierta && <span className="pill bad" style={{ marginLeft: 6 }}>Cerrada</span>}
+                {g.abierta && masCerca && masCerca.k === g.k && <span className="pill ok" style={{ marginLeft: 6 }}>La más cercana</span>}
+                {g.abierta && g.promo && <span className="pill warn" style={{ marginLeft: 6 }}>Promo</span>}
+                {g.abierta && g.radio !== null && Number(g.radio) === 0 && <span className="pill warn" style={{ marginLeft: 6 }}>Solo retiro</span>}
+                {g.abierta && g.radio !== null && Number(g.radio) > 0 && g.dentro === false && <span className="pill warn" style={{ marginLeft: 6 }}>Solo retiro en tu zona</span>}
+                {g.abierta && g.radio !== null && Number(g.radio) > 0 && g.dentro !== false && <span className="mu"> · envía hasta {kmTxt(g.radio)}</span>}
+                {g.direccion && <span className="mu" style={{ display: 'block', fontWeight: 400 }}>{g.direccion}</span>}
+              </button>
+            ))}
+          </div>
+          {ubic && <p className="mu">Las distancias son en línea recta, aproximadas.</p>}
+        </div>
+      )}
       <div className="chips chips-parejos">
         {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
           <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null); setEstiloSel(null) }}>{s.nombre}</button>
@@ -223,7 +344,9 @@ export default function Tienda({ perfil }) {
       )}
       <div className="row" style={{ justifyContent: 'flex-start', gap: 8, margin: '8px 0' }}>
         <label htmlFor="orden" className="mu" style={{ margin: 0 }}>Ordenar por</label>
-        <select id="orden" style={{ flex: 1, width: '100%' }} value={orden} onChange={(e) => setOrden(e.target.value)}>
+        <select id="orden" style={{ flex: 1, width: '100%' }} value={ordenEf} onChange={(e) => setOrden(e.target.value)}>
+          {cercania && <option value="cercania">Más cercanas primero</option>}
+          {cercania && <option value="promo">Con promoción activa</option>}
           <option value="seccion">Sección</option>
           <option value="menor">Precio: de menor a mayor</option>
           <option value="mayor">Precio: de mayor a menor</option>
@@ -239,7 +362,7 @@ export default function Tienda({ perfil }) {
             {p.tienda_formatos && <span className="pill ok" style={{ marginLeft: 6 }}>{p.tienda_formatos.nombre}</span>}
             {p.tienda_estilos && <span className="pill warn" style={{ marginLeft: 6 }}>{p.tienda_estilos.nombre}</span>}
             {seccion === 'todos' && nombreSeccion[p.seccion] && <p className="mu">{nombreSeccion[p.seccion]}</p>}
-            <p className="mu">Cervecería: <b>{cerveceriaDe(p, config.cerveceria_club)}</b></p>
+            <p className="mu">Cervecería: <b>{cerveceriaDe(p, config.cerveceria_club)}</b>{cercania && cercMap[p.productor_id || ''] && cercMap[p.productor_id || ''].distancia_km != null ? ' · a ' + kmTxt(cercMap[p.productor_id || ''].distancia_km) : ''}</p>
             {p.descripcion && <p className="mu">{p.descripcion}</p>}
             <PromosProducto p={p} ahora={ahora} onFin={alVencer} />
             <p>{vigente(p, 'pct', ahora) && !vigente(p, '2x1', ahora)
@@ -292,9 +415,15 @@ export default function Tienda({ perfil }) {
           <label>Entrega</label>
           <div className="chips" style={{ marginTop: 0 }}>
             {ENTREGAS.map(([id, t]) => (
-              <button key={id} className={'chip' + (entrega === id ? ' on' : '')} onClick={() => setEntrega(id)}>{t}</button>
+              <button key={id} className={'chip' + (entrega === id ? ' on' : '')} disabled={id === 'envio' && sinEnvio.length > 0} onClick={() => setEntrega(id)}>{t}</button>
             ))}
           </div>
+          {sinEnvio.length > 0 && (
+            <p className="msg error">
+              {sinEnvio.map(nombreDe).join(', ')} {sinEnvio.length === 1 ? 'no envía' : 'no envían'} a tu zona: solo retiro en el local.
+              {sinEnvio.length > 0 && vendedores > 1 ? ' Si querés envío, hacé el pedido sin ' + (sinEnvio.length === 1 ? 'esa cervecería.' : 'esas cervecerías.') : ''}
+            </p>
+          )}
           {entrega === 'envio' && (
             <>
               <label>Dirección de entrega</label>
@@ -311,8 +440,15 @@ export default function Tienda({ perfil }) {
                 <>
                   <input id="dir" aria-label="Dirección de entrega" placeholder="Calle, número y localidad" value={direccion}
                     onChange={(e) => { setDireccion(e.target.value); setCoords(null) }} />
+                  {cercania && <BotonBuscar texto={direccion} onResultado={(r) => { setDireccion(r.direccion); setCoords({ lat: r.lat, lng: r.lng }) }} />}
                   <BotonUbicacion onResultado={(r) => { setDireccion(r.direccion); setCoords({ lat: r.lat, lng: r.lng }) }} />
                 </>
+              )}
+              {sinMapa.length > 0 && (
+                <p className="msg error" style={{ marginTop: 6 }}>
+                  {sinMapa.map(nombreDe).join(', ')} {sinMapa.length === 1 ? 'envía' : 'envían'} hasta cierta distancia: para pedir envío ubicá la dirección en el mapa
+                  ({guardadas.length > 0 ? 'elegí "Otra dirección" y tocá ' : 'tocá '}Buscar dirección o Usar mi ubicación).
+                </p>
               )}
               {coordsFinal && <p className="mu" style={{ marginTop: 6 }}>Se va a mandar también el link de Google Maps con tu ubicación.</p>}
               {hayDeliveryGratis && <p className="msg ok" style={{ marginTop: 6 }}>Delivery gratis: {lineas.filter((l) => l.deliveryGratis).map((l) => l.nombre).join(', ')}. El envío de esos productos no tiene costo.</p>}
@@ -323,7 +459,7 @@ export default function Tienda({ perfil }) {
             <b>Total</b>
             <span className="pts">{pago === 'puntos' ? fmt(totalPuntos) + ' pts' : pesos(totalPesos)}</span>
           </div>
-          <button className="btn pri" style={{ marginTop: 12, width: '100%' }} disabled={enviando || !pagoValido || !direccionOk} onClick={confirmar}>
+          <button className="btn pri" style={{ marginTop: 12, width: '100%' }} disabled={enviando || !pagoValido || !direccionOk || sinMapa.length > 0} onClick={confirmar}>
             <Icon name="pint" size={18} />{enviando ? 'Enviando...' : 'Confirmar pedido'}
           </button>
         </div>

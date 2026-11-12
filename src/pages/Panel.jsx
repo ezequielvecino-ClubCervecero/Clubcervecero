@@ -1885,6 +1885,53 @@ function ZonaPeligro() {
   )
 }
 
+// Interruptor de la función de cercanía: apagada, la tienda funciona como siempre.
+function CercaniaAdmin() {
+  const [activa, setActiva] = useState(null)
+  const [ubic, setUbic] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  const cargar = useCallback(async () => {
+    const [a, u, p] = await Promise.all([
+      supabase.rpc('cercania_activa'),
+      supabase.from('productor_ubicacion').select('productor_id, lat, radio_envio_km, direccion_publica'),
+      supabase.from('productores').select('id', { count: 'exact', head: true }),
+    ])
+    setActiva(!!a.data)
+    const filas = u.data || []
+    setUbic({ total: p.count || 0, conDireccion: filas.filter((x) => x.lat != null).length, conRadio: filas.filter((x) => x.radio_envio_km != null).length })
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function cambiar(valor) {
+    setMsg(null)
+    if (valor && ubic && ubic.conDireccion === 0 && !window.confirm('Ninguna cervecería cargó su dirección todavía: los clientes no van a ver distancias. ¿Activarla igual?')) return
+    const { error } = await supabase.rpc('poner_cercania', { p_activa: valor })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: valor ? 'Cercanía activada.' : 'Cercanía apagada: la tienda funciona como antes.' })
+    cargar()
+  }
+
+  if (activa === null) return null
+  return (
+    <div className="card" style={{ borderColor: activa ? 'var(--ok)' : undefined }}>
+      <div className="row">
+        <h3>Cercanía de cervecerías</h3>
+        <span className={'pill ' + (activa ? 'ok' : 'warn')}>{activa ? 'Activada' : 'Apagada'}</span>
+      </div>
+      <p className="mu">
+        Activada: la tienda muestra las cervecerías de la más cercana a la más lejana (solo la distancia, nunca la dirección salvo que el productor lo permita) y cada una puede limitar su radio de envío; fuera del radio el cliente solo puede retirar.
+        Apagada: todo funciona como siempre, sin distancias ni radios.
+      </p>
+      {ubic && <p className="mu">Cargaron su dirección {ubic.conDireccion} de {ubic.total} productores y definieron un radio de envío {ubic.conRadio}.</p>}
+      <button type="button" className={'btn' + (activa ? '' : ' pri')} style={{ marginTop: 8 }} onClick={() => cambiar(!activa)}>
+        {activa ? 'Apagar cercanía' : 'Activar cercanía'}
+      </button>
+      <Msg m={msg} />
+    </div>
+  )
+}
+
 function ProductoresAdmin({ club }) {
   const hoy = new Date(Date.now() - 3 * 3600 * 1000)
   const actual = { a: hoy.getUTCFullYear(), m: hoy.getUTCMonth() }
@@ -1995,6 +2042,7 @@ function ProductoresAdmin({ club }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Productores</h2>
+      <CercaniaAdmin />
       <Msg m={msg} />
 
       {rends.length > 0 && (
