@@ -3,12 +3,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import MiUsuario from '../MiUsuario'
 import Reloj from '../Reloj'
-import { Msg, Acordeon, Navegacion, fmt, plata, fechaHora, cap, imprimirTicket } from '../ui'
+import { Msg, Navegacion, fmt, plata, fechaHora, cap, imprimirTicket } from '../ui'
 import { subirImagenProducto } from '../imagenes'
 import TiendaControl from '../TiendaControl'
 import { CamposProducto } from './Panel'
 import { datosPromo } from '../promos'
 import ProductoPlegable from '../ProductoPlegable'
+import EscanerProductor from '../EscanerProductor'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + plata(n)
@@ -23,6 +24,9 @@ const diasDesde = (ts) => Math.floor((Date.now() - new Date(ts).getTime()) / 864
 
 export default function Productor({ perfil }) {
   const [vista, setVista] = useState('inicio')
+  const [filtro, setFiltro] = useState('amarillo')
+  const [periodo, setPeriodo] = useState('mes')
+  const irAPedidos = (f) => { setFiltro(f); setVista('pedidos') }
   const [pedidos, setPedidos] = useState(null)
   const [resumen, setResumen] = useState(null)
   const [inicio, setInicio] = useState(null)
@@ -54,8 +58,8 @@ export default function Productor({ perfil }) {
 
   return (
     <>
-      {vista === 'inicio' && <Inicio perfil={perfil} inicio={inicio} error={error} irA={setVista} />}
-      {vista === 'pedidos' && <Pedidos pedidos={pedidos} resumen={resumen} datos={datos} error={error} recargar={cargar} />}
+      {vista === 'inicio' && <Inicio perfil={perfil} inicio={inicio} error={error} irA={setVista} pedidos={pedidos} datos={datos} periodo={periodo} irAPedidos={irAPedidos} />}
+      {vista === 'pedidos' && <Pedidos pedidos={pedidos} resumen={resumen} datos={datos} error={error} recargar={cargar} filtro={filtro} setFiltro={setFiltro} periodo={periodo} setPeriodo={setPeriodo} />}
       {vista === 'productos' && <Productos perfil={perfil} datos={datos} oculto={!!(inicio && inicio.oculto)} />}
       {vista === 'cuenta' && <Cuenta perfil={perfil} inicio={inicio} datos={datos} />}
       {vista === 'datos' && <Datos perfil={perfil} datos={datos} onGuardado={cargar} />}
@@ -69,8 +73,38 @@ export default function Productor({ perfil }) {
   )
 }
 
+// Semáforo de pedidos: verde = entregados (cerrados), amarillo = esperan aceptación o entrega, rojo = no se concretaron.
+const ROJOS = ['rechazado', 'vencido', 'no_entregado', 'cancelado']
+const esDelMes = (ts) => { const d = new Date(ts), h = new Date(); return d.getMonth() === h.getMonth() && d.getFullYear() === h.getFullYear() }
+function grupos(pedidos, periodo) {
+  const en = (p) => periodo === 'todos' || esDelMes(p.creado_en)
+  return {
+    verde: pedidos.filter((p) => p.estado === 'confirmado' && en(p)),
+    amarillo: pedidos.filter((p) => p.estado === 'pendiente' || p.estado === 'aceptado'),
+    rojo: pedidos.filter((p) => ROJOS.includes(p.estado) && en(p)),
+  }
+}
+const COLORES = {
+  verde: { fondo: '#2e9d57', texto: '#fff', nombre: 'Entregados' },
+  amarillo: { fondo: '#f0b429', texto: '#1b1400', nombre: 'Pendientes' },
+  rojo: { fondo: '#d64545', texto: '#fff', nombre: 'Cancelados' },
+}
+function Semaforo({ g, filtro, onElegir }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, margin: '10px 0' }}>
+      {['verde', 'amarillo', 'rojo'].map((k) => (
+        <button key={k} type="button" onClick={() => onElegir(k)} aria-pressed={filtro === k}
+          style={{ background: COLORES[k].fondo, color: COLORES[k].texto, border: filtro === k ? '3px solid var(--tx, #fff)' : '3px solid transparent', borderRadius: 14, padding: '12px 4px', cursor: 'pointer', font: 'inherit' }}>
+          <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1 }}>{g[k].length}</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{COLORES[k].nombre}</div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // Lo primero que ve el productor: avisos, tienda, resumen del mes y eventos.
-function Inicio({ perfil, inicio, error, irA }) {
+function Inicio({ perfil, inicio, error, irA, pedidos, datos, periodo, irAPedidos }) {
   const [eventos, setEventos] = useState([])
   useEffect(() => {
     supabase.from('eventos_productores').select('*').gte('fecha', new Date().toISOString()).order('fecha')
@@ -97,7 +131,18 @@ function Inicio({ perfil, inicio, error, irA }) {
 
   return (
     <>
-      <h2 style={{ marginTop: 6 }}>Inicio</h2>
+      <div className="member">
+        <p className="mu" style={{ margin: 0 }}>Cervecería</p>
+        <h2 style={{ margin: '2px 0 8px' }}>{(datos && datos.cerveceria) || 'Sin nombre cargado'}</h2>
+        <p style={{ margin: '4px 0' }}><span className="pill ok">Productor</span></p>
+        <p style={{ margin: '4px 0' }}><b>Socio N.º {perfil.numero_socio != null ? String(perfil.numero_socio).padStart(4, '0') : '—'}</b></p>
+        <p className="mu">{[perfil.nombre, perfil.apellido].filter(Boolean).join(' ') || 'Sin nombre'}</p>
+        {perfil.usuario && <p className="mu">Usuario: {perfil.usuario}</p>}
+        {datos && datos.whatsapp && <p className="mu">WhatsApp: {datos.whatsapp}</p>}
+        <Semaforo g={grupos(pedidos || [], periodo)} filtro={null} onElegir={irAPedidos} />
+        <p className="mu" style={{ fontSize: 12 }}>Entregados y cancelados: de este mes. Pendientes: todos los que esperan respuesta o entrega.</p>
+      </div>
+      <EscanerProductor />
       {error && <p className="msg error">{error}</p>}
       {aviso && (
         <div className="card" style={{ borderColor: 'var(--am)' }}>
@@ -157,10 +202,9 @@ function Inicio({ perfil, inicio, error, irA }) {
   )
 }
 
-function Pedidos({ pedidos, resumen, datos, error, recargar }) {
+function Pedidos({ pedidos, resumen, datos, error, recargar, filtro, setFiltro, periodo, setPeriodo }) {
   const [msg, setMsg] = useState(null)
   const [ahora, setAhora] = useState(Date.now())
-  const [verAnteriores, setVerAnteriores] = useState(false)
   const [cuantos, setCuantos] = useState(10)
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 20000)
@@ -191,7 +235,8 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
   if (pedidos === null) return <p className="mu">Cargando...</p>
   const pendientes = pedidos.filter((p) => p.estado === 'pendiente')
   const enProceso = pedidos.filter((p) => p.estado === 'aceptado')
-  const anteriores = pedidos.filter((p) => p.estado !== 'pendiente' && p.estado !== 'aceptado')
+  const g = grupos(pedidos, periodo)
+  const lista = filtro === 'verde' ? g.verde : g.rojo
   const datosFaltan = datos !== undefined && (!datos || !datos.cerveceria.trim() || !datos.whatsapp)
   const items = (p) => p.items.map((i, k) => <p key={k}>{i.cantidad} × {i.nombre}{i.formato ? ' (' + i.formato + ')' : ''}</p>)
   const total = (p) => (p.pago === 'puntos' ? fmt(p.total_puntos) + ' pts (reservados hasta la entrega)' : pesos(p.total_pesos))
@@ -213,6 +258,14 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
         </div>
       )}
 
+      <Semaforo g={g} filtro={filtro} onElegir={(k) => { setFiltro(k); setCuantos(10) }} />
+      {filtro !== 'amarillo' && (
+        <div className="chips" style={{ marginTop: 0 }}>
+          <button type="button" className={'chip' + (periodo === 'mes' ? ' on' : '')} onClick={() => { setPeriodo('mes'); setCuantos(10) }}>Este mes</button>
+          <button type="button" className={'chip' + (periodo === 'todos' ? ' on' : '')} onClick={() => { setPeriodo('todos'); setCuantos(10) }}>Todos</button>
+        </div>
+      )}
+      {filtro === 'amarillo' && <>
       <h2>Para responder</h2>
       {pendientes.length === 0 && <p className="mu">No tenés pedidos pendientes.</p>}
       {pendientes.map((p) => {
@@ -253,9 +306,12 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
         )
       })}
 
-      <Acordeon titulo={'Anteriores (' + anteriores.length + ')'} icono="pint" abierto={verAnteriores} onToggle={() => { setVerAnteriores(!verAnteriores); setCuantos(10) }}>
-      {anteriores.length === 0 && <p className="mu">Todavía no cerraste pedidos.</p>}
-      {anteriores.slice(0, cuantos).map((p) => {
+      </>}
+
+      {filtro !== 'amarillo' && <>
+      <h2>{filtro === 'verde' ? 'Entregados' : 'Cancelados'}</h2>
+      {lista.length === 0 && <p className="mu">{filtro === 'verde' ? 'No hay pedidos entregados' : 'No hay pedidos cancelados'}{periodo === 'mes' ? ' este mes.' : '.'}</p>}
+      {lista.slice(0, cuantos).map((p) => {
         const [clase, texto] = ESTADOS[p.estado] || ['bad', p.estado]
         return (
           <div key={p.id} className="card">
@@ -265,12 +321,12 @@ function Pedidos({ pedidos, resumen, datos, error, recargar }) {
           </div>
         )
       })}
-      {cuantos < anteriores.length && (
+      {cuantos < lista.length && (
         <button type="button" className="btn" style={{ width: '100%' }} onClick={() => setCuantos(cuantos + 10)}>
-          Ver más ({anteriores.length - cuantos} restantes)
+          Ver más ({lista.length - cuantos} restantes)
         </button>
       )}
-      </Acordeon>
+      </>}
     </>
   )
 }

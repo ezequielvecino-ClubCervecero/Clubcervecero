@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { fmt, plata, fechaHora, TIPOS } from '../ui'
+import ResumenPuntos from '../ResumenPuntos'
 
-export default function Movimientos({ socios }) {
+export default function Movimientos({ socios, esAdmin }) {
   const [vista, setVista] = useState('puntos')
   return (
     <>
       <div className="chips">
         <button type="button" className={'chip' + (vista === 'puntos' ? ' on' : '')} onClick={() => setVista('puntos')}>Puntos</button>
         <button type="button" className={'chip' + (vista === 'dinero' ? ' on' : '')} onClick={() => setVista('dinero')}>Compras, entradas y cuotas</button>
+        {esAdmin && <button type="button" className={'chip' + (vista === 'resumen' ? ' on' : '')} onClick={() => setVista('resumen')}>Resumen de puntos</button>}
       </div>
-      {vista === 'puntos' ? <MovimientosPuntos socios={socios} /> : <MovimientosDinero socios={socios} />}
+      {vista === 'puntos' && <MovimientosPuntos socios={socios} />}
+      {vista === 'dinero' && <MovimientosDinero socios={socios} />}
+      {vista === 'resumen' && esAdmin && <ResumenPuntos />}
     </>
   )
 }

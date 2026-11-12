@@ -6,6 +6,7 @@ import { MiUsuarioPropio } from '../MiUsuario'
 import Reloj from '../Reloj'
 import Usuarios from '../Usuarios'
 import IconosMarca from '../IconosMarca'
+import QrPuntosAdmin from '../QrPuntosAdmin'
 import { PromosEditor, datosPromo, textoPromoItem } from '../promos'
 import { Icon, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, plata, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
@@ -28,6 +29,7 @@ const ADMIN_MENU = [
   ['ajuste', 'Ajustes y roles', 'Ajustar puntos y cambiar roles', 'hop'],
   ['productores', 'Productores', 'Pedidos, ventas y avisos', 'pint'],
   ['puntos', 'Puntos', 'Cuánto suma cada compra y referido', 'crown'],
+  ['qrpuntos', 'QR de puntos', 'Códigos para regalar puntos', 'gift'],
   ['marca', 'Marca', 'Nombre, logos y WhatsApp', 'barrel'],
 ]
 
@@ -103,7 +105,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
       )}
       {vista === 'cupon' && <Cupon />}
       {vista === 'cobros' && <Cobros onCambio={contarPendientes} esAdmin={esAdmin} />}
-      {vista === 'mov' && <Movimientos socios={socios} />}
+      {vista === 'mov' && <Movimientos socios={socios} esAdmin={esAdmin} />}
       {vista === 'admin' && esAdmin && !sub && (
         <>
           <h2 style={{ marginTop: 6 }}>Administración</h2>
@@ -128,6 +130,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
           {sub === 'ajuste' && <Ajustes socios={socios} recargar={cargarSocios} />}
           {sub === 'productores' && <ProductoresAdmin club={marca.nombre_app} />}
           {sub === 'puntos' && <PuntosAdmin />}
+          {sub === 'qrpuntos' && <QrPuntosAdmin />}
           {sub === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
         </>
       )}

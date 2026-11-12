@@ -234,7 +234,7 @@ export function EntradasSocio({ onSaldo, eventoCompra }) {
 // ---- Lado del local (administrador y personal) ----
 
 // Ficha que aparece al escanear el QR de un socio o de una entrada. Desde acá se marca la entrada como usada.
-export function FichaEscaneo({ ficha, onCambio, onVolver }) {
+export function FichaEscaneo({ ficha, onCambio, onVolver, soloIngreso }) {
   const [msg, setMsg] = useState(null)
   const s = ficha.socio
   async function usar(id) {
@@ -262,9 +262,9 @@ export function FichaEscaneo({ ficha, onCambio, onVolver }) {
             </span>
           </div>
           <p className="mu">{fechaLarga(e.fecha)} · N.º {e.numero}</p>
-          {e.estado === 'usada' && <p className="mu">Usada el {fechaCorta(e.usada_en)}</p>}
-          {e.estado === 'pendiente' && <p className="mu">Todavía no está paga: confirmá el cobro en Cobros.</p>}
-          {e.estado === 'activa' && <button type="button" className="btn pri" style={{ marginTop: 8 }} onClick={() => usar(e.id)}>Marcar como usada</button>}
+          {e.estado === 'usada' && <p className="mu">Ya fue usada el {fechaCorta(e.usada_en)}{e.usada_por ? ' · la escaneó ' + e.usada_por : ''}</p>}
+          {e.estado === 'pendiente' && <p className="mu">{soloIngreso ? 'Todavía no está paga: no la dejes pasar. El cobro lo confirma el administrador o el personal.' : 'Todavía no está paga: confirmá el cobro en Cobros.'}</p>}
+          {e.estado === 'activa' && <button type="button" className="btn pri" style={{ marginTop: 8 }} onClick={() => usar(e.id)}>{soloIngreso ? 'Dar ingreso' : 'Marcar como usada'}</button>}
         </div>
       ))}
       <Msg m={msg} />

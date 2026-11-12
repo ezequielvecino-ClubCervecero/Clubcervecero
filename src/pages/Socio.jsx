@@ -10,6 +10,7 @@ import Preferencias from '../Preferencias'
 import { QrIdentificacion, EntradasSocio } from '../Entradas'
 import MasVendidos from '../MasVendidos'
 import Reloj from '../Reloj'
+import EscanerPuntos from '../EscanerPuntos'
 
 const COSTO_TRANSFERENCIA = 0.5
 const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
@@ -61,6 +62,8 @@ function Inicio({ perfil, irAEntrada }) {
         <div className="bal num"><Coin />{fmt(saldo)}</div>
         <p className="mu">puntos</p>
       </div>
+
+      <EscanerPuntos onListo={cargar} />
 
       <div className={'estado ' + e.clase}>
         <b>{e.titulo}</b>
