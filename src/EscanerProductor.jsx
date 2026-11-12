@@ -72,7 +72,7 @@ export default function EscanerProductor() {
           <p className="mu" style={{ marginTop: 6 }}>Escaneá el QR del cupón de canje o de una entrada, o escribí el código.</p>
           {escaneando
             ? <Escaner onLeido={leido} onCerrar={() => setEscaneando(false)} />
-            : <button type="button" className="btn pri" style={{ marginTop: 12 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
+            : <button type="button" className="btn pri" style={{ marginTop: 12, width: '100%', justifyContent: 'center', padding: '16px 14px', fontSize: 18 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
                 <Icon name="gift" size={18} />Escanear con la cámara
               </button>}
           <form onSubmit={(e) => { e.preventDefault(); consultar(codigo) }}>

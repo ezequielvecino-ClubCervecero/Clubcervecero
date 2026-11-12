@@ -14,6 +14,7 @@ import AvisosProductor from '../AvisosProductor'
 import { QrIdentificacion } from '../Entradas'
 import { textoPresentismo } from '../FichaProductor'
 import { AvisosRecordatorio } from '../AvisosActivar'
+import { InstalarRecordatorio } from '../InstalarApp'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + plata(n)
@@ -137,6 +138,7 @@ function Inicio({ perfil, inicio, error, irA, pedidos, datos, periodo, irAPedido
 
   return (
     <>
+      <InstalarRecordatorio />
       <AvisosRecordatorio />
       <div className="member" style={{ position: 'relative' }}>
         <QrIdentificacion codigo={perfil.codigo_qr} prefijo="PRO-" etiqueta="productor" />

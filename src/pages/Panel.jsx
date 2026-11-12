@@ -19,6 +19,7 @@ import { FichaEscaneo, EntradasPorCobrar, EntradasEvento } from '../Entradas'
 import FichaProductor, { textoPresentismo } from '../FichaProductor'
 import PresentesEventos from '../PresentesEventos'
 import { AvisosRecordatorio } from '../AvisosActivar'
+import { InstalarRecordatorio } from '../InstalarApp'
 import ProductoPlegable from '../ProductoPlegable'
 import { WA_BASE, WA_ETIQUETAS, textosWa } from '../whatsapp'
 
@@ -81,7 +82,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
 
   return (
     <>
-      {vista === (esAdmin ? 'cobros' : 'carga') && <AvisosRecordatorio />}
+      {vista === (esAdmin ? 'cobros' : 'carga') && <><InstalarRecordatorio /><AvisosRecordatorio /></>}
       {vista === 'carga' && (!esAdmin || subCarga === 'puntos') && (
         <>
           {esAdmin && <button type="button" className="btn" style={{ marginBottom: 12 }} onClick={() => setSubCarga(null)}>← Volver a Cargar</button>}
@@ -266,7 +267,7 @@ function Cupon() {
           <p className="mu" style={{ marginTop: 6 }}>Escaneá el QR del cupón, del socio, del productor o de una entrada, o escribí el código de 8 caracteres.</p>
           {escaneando
             ? <Escaner onLeido={leido} onCerrar={() => setEscaneando(false)} />
-            : <button type="button" className="btn pri" style={{ marginTop: 12 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
+            : <button type="button" className="btn pri" style={{ marginTop: 12, width: '100%', justifyContent: 'center', padding: '16px 14px', fontSize: 18 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
                 <Icon name="gift" size={18} />Escanear con la cámara
               </button>}
           <form onSubmit={(e) => { e.preventDefault(); consultar(codigo.trim()) }}>

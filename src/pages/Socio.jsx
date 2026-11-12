@@ -12,6 +12,7 @@ import MasVendidos from '../MasVendidos'
 import Reloj from '../Reloj'
 import EscanerPuntos from '../EscanerPuntos'
 import { AvisosRecordatorio } from '../AvisosActivar'
+import { InstalarRecordatorio } from '../InstalarApp'
 
 const COSTO_TRANSFERENCIA = 0.5
 const MES = new Date().toLocaleDateString('es-AR', { month: 'long' })
@@ -52,6 +53,7 @@ function Inicio({ perfil, irAEntrada }) {
 
   return (
     <>
+      <InstalarRecordatorio />
       <AvisosRecordatorio />
       <div className="member" style={{ position: 'relative' }}>
         <QrIdentificacion codigo={p.codigo_qr} />

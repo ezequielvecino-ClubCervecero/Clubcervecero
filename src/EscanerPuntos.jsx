@@ -41,7 +41,7 @@ export default function EscanerPuntos({ onListo, fijo = false }) {
       <p className="mu">Escaneá el QR que te muestran en el local y sumás puntos al instante.</p>
       {escaneando
         ? <Escaner onLeido={leido} onCerrar={() => setEscaneando(false)} />
-        : <button type="button" className="btn pri" style={{ marginTop: 8 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
+        : <button type="button" className="btn pri" style={{ marginTop: 8, width: '100%', justifyContent: 'center', padding: '16px 14px', fontSize: 18 }} onClick={() => { setMsg(null); setEscaneando(true) }}>
             <Icon name="gift" size={18} />Abrir la cámara
           </button>}
       <form onSubmit={(e) => { e.preventDefault(); canjear(codigo) }}>

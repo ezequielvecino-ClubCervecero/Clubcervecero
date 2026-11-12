@@ -7,6 +7,7 @@ import Panel from './pages/Panel'
 import Productor from './pages/Productor'
 import Preferencias from './Preferencias'
 import { AvisosCartel } from './AvisosActivar'
+import { InstalarCartel } from './InstalarApp'
 
 const MARCA_BASE = {
   nombre_app: 'Club Cervecero',
@@ -88,7 +89,7 @@ export default function App() {
   }, [session])
 
   if (session === undefined) return <p className="mu">Cargando...</p>
-  if (!session) return <Login marca={marca} />
+  if (!session) return <><Login marca={marca} /><InstalarCartel /></>
   if (recuperando) return <NuevaClave marca={marca} onListo={() => setRecuperando(false)} />
   if (error) return <p className="msg error">No se pudo cargar tu perfil: {error}</p>
   if (!perfil) return <p className="mu">Cargando tu perfil...</p>
@@ -119,6 +120,7 @@ export default function App() {
           <button className="btn" onClick={() => supabase.auth.signOut()}>Salir</button>
         </div>
       </header>
+      <InstalarCartel />
       <AvisosCartel rol={perfil.rol} />
       {perfil.rol !== 'socio' && verPrefs && <Preferencias perfil={perfil} />}
       {perfil.rol === 'socio' && <Socio perfil={perfil} />}

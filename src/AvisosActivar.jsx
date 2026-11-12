@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { estadoPush, activarPush } from './push'
 import { Icon, Msg } from './ui'
+import { useInstalarPendiente } from './InstalarApp'
 
 const CLAVE = 'avisos_cartel_visto'
 const yaVisto = () => { try { return localStorage.getItem(CLAVE) === '1' } catch { return false } }
@@ -41,10 +42,11 @@ async function activar(setMsg) {
 // Cartel grande: aparece una vez (si los rechaza o lo cierra, no vuelve; queda el recordatorio chico).
 export function AvisosCartel({ rol }) {
   const estado = useEstadoPush()
+  const instalarPendiente = useInstalarPendiente()
   const [cerrado, setCerrado] = useState(yaVisto())
   const [msg, setMsg] = useState(null)
   const [ocupado, setOcupado] = useState(false)
-  if (cerrado || (estado !== 'inactivo' && estado !== 'instalar')) return null
+  if (cerrado || instalarPendiente || (estado !== 'inactivo' && estado !== 'instalar')) return null
 
   const cerrar = () => { marcarVisto(); setCerrado(true) }
   async function aceptar() {

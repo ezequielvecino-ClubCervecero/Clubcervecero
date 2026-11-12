@@ -37,7 +37,7 @@ export default function Escaner({ onLeido, onCerrar }) {
     <div style={{ marginTop: 12 }}>
       <div id="lector-qr" style={{ width: '100%', borderRadius: 12, overflow: 'hidden' }} />
       {error && <p className="msg error">{error}</p>}
-      <div style={{ marginTop: 10 }}><button type="button" className="btn" onClick={onCerrar}>Cerrar cámara</button></div>
+      <div style={{ marginTop: 10 }}><button type="button" className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={onCerrar}>Cerrar cámara</button></div>
     </div>
   )
 }
