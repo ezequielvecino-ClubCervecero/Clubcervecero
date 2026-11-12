@@ -1869,8 +1869,8 @@ function ZonaPeligro() {
       {!abierto && <button type="button" className="btn" style={{ marginTop: 8, borderColor: ROJO, color: ROJO }} onClick={() => setAbierto(true)}>Reiniciar todo</button>}
       {abierto && (
         <div style={{ marginTop: 8 }}>
-          <p>Se borra solo lo que se movió: pedidos, puntos, cupones, pagos de cuota, avisos de pago, rendiciones e inscripciones a eventos.</p>
-          <p className="mu">Se conservan los usuarios, productores, productos y su stock, premios, eventos, novedades y la configuración. Todos los socios quedan como Miembro, con 0 puntos y la cuota vencida.</p>
+          <p>Se borra todo lo que se movió: pedidos, puntos, canjes, rendiciones, cuotas, QR de puntos, entradas, eventos y presentismo, avisos enviados, pagos de Mercado Pago, productos, secciones y promociones, novedades, direcciones guardadas y solicitudes de nombre.</p>
+          <p className="mu">Se conservan las cuentas con su rol, los datos de cada productor (cervecería, número de socio y WhatsApp), premios, sucursales, estilos, horarios y la configuración. Todos los socios quedan como Miembro (Gold en cero), con 0 puntos y la cuota vencida. Después tenés que crear las secciones de la tienda para que los productores carguen su stock.</p>
           <p className="msg error">Antes de seguir, hacé una copia de seguridad en Supabase. Esto no hace backup solo y no se puede deshacer.</p>
           <label htmlFor="reiniciar">Para confirmar, escribí REINICIAR</label>
           <input id="reiniciar" value={txt} autoComplete="off" onChange={(e) => setTxt(e.target.value)} />
