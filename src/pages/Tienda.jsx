@@ -62,6 +62,7 @@ export default function Tienda({ perfil }) {
   const [version, setVersion] = useState(0)
   const [tiendas, setTiendas] = useState({})
   const [cercania, setCercania] = useState(false)
+  const [filtroEstilo, setFiltroEstilo] = useState(false)
   const [ubicGps, setUbicGps] = useState(null) // ubicación del celular, si la dio
   const [msgGps, setMsgGps] = useState(null)
   const [cerc, setCerc] = useState([]) // distancias desde la ubicación del cliente
@@ -75,15 +76,17 @@ export default function Tienda({ perfil }) {
   const alVencer = useCallback(() => setAhora(Date.now()), [])
 
   const cargar = useCallback(async () => {
-    const [s, p, c, sd, et, ca] = await Promise.all([
+    const [s, p, c, sd, et, ca, fe] = await Promise.all([
       supabase.from('tienda_secciones').select('*').eq('visible', true).order('orden'),
       supabase.from('tienda_productos').select('*, productores(cerveceria), tienda_formatos(nombre), tienda_estilos(nombre)').eq('activo', true).gt('stock', 0).order('nombre'),
       supabase.from('configuracion').select('whatsapp, aviso_envio, cerveceria_club, wa_textos').eq('id', 1).single(),
       supabase.rpc('saldo_disponible', { p_socio: perfil.id }),
       supabase.rpc('estado_tiendas'),
       supabase.rpc('cercania_activa'),
+      supabase.rpc('filtro_estilo_activo'),
     ])
     setCercania(!!ca.data)
+    setFiltroEstilo(!!fe.data)
     const vis = s.data || []
     setSecciones(vis)
     setProductos((p.data || []).filter((x) => vis.some((v) => v.id === x.seccion)))
@@ -272,12 +275,11 @@ export default function Tienda({ perfil }) {
   const rango = Object.fromEntries(grupos.map((g, i) => [g.k, i]))
   // Si la cervecería elegida cierra mientras se mira, se vuelve a "Todas".
   const cervEf = cervSel !== null && grupos.some((g) => g.k === cervSel && g.abierta) ? cervSel : null
-  const masCerca = grupos.find((g) => g.abierta && g.dist != null)
   const deSeccion = abiertos.filter((p) => (seccion === 'todos' || p.seccion === seccion) && (!cercania || cervEf === null || (p.productor_id || '') === cervEf))
   // Formatos que hay en lo que se está viendo (para el filtro).
   const formatosHay = [...new Map(deSeccion.filter((p) => p.formato_id && p.tienda_formatos).map((p) => [p.formato_id, p.tienda_formatos.nombre])).entries()]
   const estilosHay = [...new Map(deSeccion.filter((p) => p.estilo_id && p.tienda_estilos).map((p) => [p.estilo_id, p.tienda_estilos.nombre])).entries()]
-  const filtrados = deSeccion.filter((p) => (!formatoSel || p.formato_id === formatoSel) && (!estiloSel || p.estilo_id === estiloSel))
+  const filtrados = deSeccion.filter((p) => (!formatoSel || p.formato_id === formatoSel) && (!filtroEstilo || !estiloSel || p.estilo_id === estiloSel))
   const visibles = [...filtrados].sort((a, b) => {
     if (ordenEf === 'menor') return Number(a.precio_pesos) - Number(b.precio_pesos) || a.nombre.localeCompare(b.nombre)
     if (ordenEf === 'mayor') return Number(b.precio_pesos) - Number(a.precio_pesos) || a.nombre.localeCompare(b.nombre)
@@ -291,36 +293,6 @@ export default function Tienda({ perfil }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
-      {cercania && grupos.length > 0 && (
-        <div className="card">
-          <b>Cervecerías</b>
-          {!ubic && (
-            <>
-              <p className="mu" style={{ marginTop: 4 }}>Para verlas de la más cercana a la más lejana, dejanos usar tu ubicación (o guardá una dirección de envío con mapa).</p>
-              <button type="button" className="btn" style={{ marginTop: 8 }} onClick={usarGps}>Usar mi ubicación</button>
-              <Msg m={msgGps} />
-            </>
-          )}
-          <div className="chips" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-            <button type="button" className={'chip' + (cervEf === null ? ' on' : '')} style={{ textAlign: 'left' }} onClick={() => setCervSel(null)}>Todas las cervecerías</button>
-            {grupos.map((g) => (
-              <button key={g.k} type="button" className={'chip' + (cervEf === g.k ? ' on' : '')} style={{ textAlign: 'left', opacity: g.abierta ? 1 : 0.6 }}
-                disabled={!g.abierta} onClick={() => setCervSel(g.k)}>
-                <b>{g.nombre}</b>
-                {g.dist != null && g.abierta && <span> · a {kmTxt(g.dist)}</span>}
-                {!g.abierta && <span className="pill bad" style={{ marginLeft: 6 }}>Cerrada</span>}
-                {g.abierta && masCerca && masCerca.k === g.k && <span className="pill ok" style={{ marginLeft: 6 }}>La más cercana</span>}
-                {g.abierta && g.promo && <span className="pill warn" style={{ marginLeft: 6 }}>Promo</span>}
-                {g.abierta && g.radio !== null && Number(g.radio) === 0 && <span className="pill warn" style={{ marginLeft: 6 }}>Solo retiro</span>}
-                {g.abierta && g.radio !== null && Number(g.radio) > 0 && g.dentro === false && <span className="pill warn" style={{ marginLeft: 6 }}>Solo retiro en tu zona</span>}
-                {g.abierta && g.radio !== null && Number(g.radio) > 0 && g.dentro !== false && <span className="mu"> · envía hasta {kmTxt(g.radio)}</span>}
-                {g.direccion && <span className="mu" style={{ display: 'block', fontWeight: 400 }}>{g.direccion}</span>}
-              </button>
-            ))}
-          </div>
-          {ubic && <p className="mu">Las distancias son en línea recta, aproximadas.</p>}
-        </div>
-      )}
       <div className="chips chips-parejos">
         {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
           <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null); setEstiloSel(null) }}>{s.nombre}</button>
@@ -334,7 +306,7 @@ export default function Tienda({ perfil }) {
           ))}
         </div>
       )}
-      {estilosHay.length > 0 && (
+      {filtroEstilo && estilosHay.length > 0 && (
         <div className="chips chips-parejos" aria-label="Filtrar por estilo">
           <button className={'chip' + (!estiloSel ? ' on' : '')} onClick={() => setEstiloSel(null)}>Todos los estilos</button>
           {estilosHay.map(([id, nombre]) => (
@@ -351,7 +323,9 @@ export default function Tienda({ perfil }) {
           <option value="menor">Precio: de menor a mayor</option>
           <option value="mayor">Precio: de mayor a menor</option>
         </select>
+        {cercania && !ubic && <button type="button" className="btn" style={{ whiteSpace: 'nowrap' }} onClick={usarGps}>Usar mi ubicación</button>}
       </div>
+      {cercania && !ubic && <Msg m={msgGps} />}
       {visibles.length === 0 && <p className="mu">No hay productos para mostrar.</p>}
       {visibles.map((p) => (
         <div key={p.id} className="card row">

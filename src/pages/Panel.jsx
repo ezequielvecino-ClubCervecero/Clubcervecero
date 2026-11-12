@@ -1932,6 +1932,32 @@ function CercaniaAdmin() {
   )
 }
 
+// Interruptor del filtro por estilo en la tienda (apagado para todos por defecto).
+function FiltroEstiloAdmin() {
+  const [activo, setActivo] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const cargar = useCallback(() => supabase.rpc('filtro_estilo_activo').then(({ data }) => setActivo(!!data)), [])
+  useEffect(() => { cargar() }, [cargar])
+  async function cambiar() {
+    setMsg(null)
+    const { error } = await supabase.rpc('poner_filtro_estilo', { p_activo: !activo })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+  if (activo === null) return null
+  return (
+    <div className="card">
+      <div className="row">
+        <h3>Filtro por estilo en la tienda</h3>
+        <span className={'pill ' + (activo ? 'ok' : 'warn')}>{activo ? 'Visible' : 'Oculto'}</span>
+      </div>
+      <p className="mu">Oculto, ningún cliente ve el filtro por estilo de cerveza. Los productos conservan su estilo.</p>
+      <button type="button" className={'btn' + (activo ? '' : ' pri')} style={{ marginTop: 8 }} onClick={cambiar}>{activo ? 'Ocultar filtro' : 'Mostrar filtro'}</button>
+      <Msg m={msg} />
+    </div>
+  )
+}
+
 function ProductoresAdmin({ club }) {
   const hoy = new Date(Date.now() - 3 * 3600 * 1000)
   const actual = { a: hoy.getUTCFullYear(), m: hoy.getUTCMonth() }
@@ -2043,6 +2069,7 @@ function ProductoresAdmin({ club }) {
     <>
       <h2 style={{ marginTop: 6 }}>Productores</h2>
       <CercaniaAdmin />
+      <FiltroEstiloAdmin />
       <Msg m={msg} />
 
       {rends.length > 0 && (
