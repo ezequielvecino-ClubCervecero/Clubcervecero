@@ -7,6 +7,7 @@ import Reloj from '../Reloj'
 import Usuarios from '../Usuarios'
 import IconosMarca from '../IconosMarca'
 import QrPuntosAdmin from '../QrPuntosAdmin'
+import AvisosAdmin from '../AvisosAdmin'
 import { PromosEditor, datosPromo, textoPromoItem } from '../promos'
 import { Icon, Msg, Acordeon, Navegacion, Categoria, CATS, fmt, plata, fechaHora, cap, imprimirTicket, imprimirVentas } from '../ui'
 import Escaner from '../Escaner'
@@ -30,6 +31,7 @@ const ADMIN_MENU = [
   ['productores', 'Productores', 'Pedidos, ventas y avisos', 'pint'],
   ['puntos', 'Puntos', 'Cuánto suma cada compra y referido', 'crown'],
   ['qrpuntos', 'QR de puntos', 'Códigos para regalar puntos', 'gift'],
+  ['avisosprod', 'Avisos de productores', 'Cupo semanal e historial de lo que envían', 'gift'],
   ['marca', 'Marca', 'Nombre, logos y WhatsApp', 'barrel'],
 ]
 
@@ -131,6 +133,7 @@ export default function Panel({ esAdmin, marca, onMarca }) {
           {sub === 'productores' && <ProductoresAdmin club={marca.nombre_app} />}
           {sub === 'puntos' && <PuntosAdmin />}
           {sub === 'qrpuntos' && <QrPuntosAdmin />}
+          {sub === 'avisosprod' && <AvisosAdmin />}
           {sub === 'marca' && <Marca marca={marca} onGuardado={onMarca} />}
         </>
       )}

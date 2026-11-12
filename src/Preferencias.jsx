@@ -8,7 +8,7 @@ const TEMAS = [['', 'Predeterminado del club'], ['violeta', 'Violeta'], ['claro'
 
 // Avisos que existen para cada rol.
 const AVISOS = {
-  socio: [['pedido_aceptado', 'Cuando aceptan mi pedido'], ['puntos', 'Cuando recibo puntos'], ['entrada', 'Cuando recibo una entrada (comprada o pasada)']],
+  socio: [['pedido_aceptado', 'Cuando aceptan mi pedido'], ['puntos', 'Cuando recibo puntos'], ['entrada', 'Cuando recibo una entrada (comprada o pasada)'], ['aviso_productor', 'Avisos de las cervecerías (promos, novedades)']],
   productor: [['pedido_nuevo', 'Cuando entra un pedido nuevo'], ['pedido_por_vencer', 'Cuando un pedido está por vencer (a los 20 minutos)']],
   admin: [['pedido_club', 'Pedidos nuevos de la tienda del club'], ['compra_entradas', 'Compras de entradas'], ['cuota_mp', 'Cuotas pagadas por Mercado Pago']],
   personal: [['pedido_club', 'Pedidos nuevos de la tienda del club']],

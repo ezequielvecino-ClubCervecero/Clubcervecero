@@ -4,8 +4,8 @@ import { supabase } from './supabaseClient'
 import { Icon, Msg, fmt } from './ui'
 import Escaner from './Escaner'
 
-export default function EscanerPuntos({ onListo }) {
-  const [abierto, setAbierto] = useState(false)
+export default function EscanerPuntos({ onListo, fijo = false }) {
+  const [abierto, setAbierto] = useState(fijo)
   const [escaneando, setEscaneando] = useState(false)
   const [codigo, setCodigo] = useState('')
   const [msg, setMsg] = useState(null)
@@ -28,7 +28,7 @@ export default function EscanerPuntos({ onListo }) {
     canjear(texto)
   }
 
-  if (!abierto) {
+  if (!abierto && !fijo) {
     return (
       <button type="button" className="btn pri" style={{ width: '100%', margin: '10px 0' }} onClick={() => setAbierto(true)}>
         <Icon name="gift" size={18} />Escanear QR de puntos
@@ -50,7 +50,7 @@ export default function EscanerPuntos({ onListo }) {
         <button className="btn" style={{ marginTop: 10 }} disabled={ocupado}>Sumar puntos</button>
       </form>
       <Msg m={msg} />
-      <div style={{ marginTop: 12 }}><button type="button" className="btn" onClick={() => { setAbierto(false); setEscaneando(false); setMsg(null) }}>Cerrar</button></div>
+      {!fijo && <div style={{ marginTop: 12 }}><button type="button" className="btn" onClick={() => { setAbierto(false); setEscaneando(false); setMsg(null) }}>Cerrar</button></div>}
     </div>
   )
 }

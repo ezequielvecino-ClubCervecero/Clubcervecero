@@ -10,6 +10,7 @@ import { CamposProducto } from './Panel'
 import { datosPromo } from '../promos'
 import ProductoPlegable from '../ProductoPlegable'
 import EscanerProductor from '../EscanerProductor'
+import AvisosProductor from '../AvisosProductor'
 
 const PAGO_TXT = { efectivo: 'Efectivo', transferencia: 'Transferencia', puntos: 'Puntos' }
 const pesos = (n) => '$ ' + plata(n)
@@ -143,6 +144,7 @@ function Inicio({ perfil, inicio, error, irA, pedidos, datos, periodo, irAPedido
         <p className="mu" style={{ fontSize: 12 }}>Entregados y cancelados: de este mes. Pendientes: todos los que esperan respuesta o entrega.</p>
       </div>
       <EscanerProductor />
+      <AvisosProductor />
       {error && <p className="msg error">{error}</p>}
       {aviso && (
         <div className="card" style={{ borderColor: 'var(--am)' }}>

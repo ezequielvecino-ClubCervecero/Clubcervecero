@@ -63,7 +63,6 @@ function Inicio({ perfil, irAEntrada }) {
         <p className="mu">puntos</p>
       </div>
 
-      <EscanerPuntos onListo={cargar} />
 
       <div className={'estado ' + e.clase}>
         <b>{e.titulo}</b>
@@ -324,13 +323,18 @@ function Canjes({ perfil, eventoCompra }) {
       )}
 
       <div className="chips">
-        <button type="button" className={'chip' + (seccion === 'premios' ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', padding: '12px 10px', fontSize: 16 }} onClick={() => setSeccion('premios')}>
+        <button type="button" className={'chip' + (seccion === 'premios' ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', padding: '12px 6px', fontSize: 15 }} onClick={() => setSeccion('premios')}>
           <Icon name="gift" size={18} />Premios
         </button>
-        <button type="button" className={'chip' + (seccion === 'entradas' ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', padding: '12px 10px', fontSize: 16 }} onClick={() => setSeccion('entradas')}>
+        <button type="button" className={'chip' + (seccion === 'entradas' ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', padding: '12px 6px', fontSize: 15 }} onClick={() => setSeccion('entradas')}>
           <Icon name="crown" size={18} />Entradas
         </button>
+        <button type="button" className={'chip' + (seccion === 'escanear' ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', padding: '12px 6px', fontSize: 15 }} onClick={() => setSeccion('escanear')}>
+          <Icon name="hop" size={18} />Escanear QR
+        </button>
       </div>
+
+      {seccion === 'escanear' && <EscanerPuntos fijo onListo={cargar} />}
 
       {seccion === 'entradas' && <EntradasSocio onSaldo={cargar} eventoCompra={eventoCompra} />}
 
