@@ -8,6 +8,7 @@ import Productor from './pages/Productor'
 import Preferencias from './Preferencias'
 import { AvisosCartel } from './AvisosActivar'
 import { InstalarCartel } from './InstalarApp'
+import { registrarUso } from './uso'
 
 const MARCA_BASE = {
   nombre_app: 'Club Cervecero',
@@ -32,6 +33,8 @@ export default function App() {
   }, [])
   useEffect(() => { cargarMarca() }, [cargarMarca])
   useEffect(() => { document.title = marca.nombre_app }, [marca.nombre_app])
+  const perfilId = perfil ? perfil.id : null
+  useEffect(() => { if (perfilId) registrarUso() }, [perfilId])
   // Ícono de la app elegido en Marca: pestaña, pantalla de inicio de iPhone y manifiesto de la app instalada.
   useEffect(() => {
     if (!marca.icono_app_url) return

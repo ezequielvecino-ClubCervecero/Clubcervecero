@@ -18,6 +18,7 @@ import TiendaControl from '../TiendaControl'
 import { FichaEscaneo, EntradasPorCobrar, EntradasEvento } from '../Entradas'
 import FichaProductor, { textoPresentismo } from '../FichaProductor'
 import PresentesEventos from '../PresentesEventos'
+import VentasUso from '../EstadisticasVentas'
 import { AvisosRecordatorio } from '../AvisosActivar'
 import { InstalarRecordatorio } from '../InstalarApp'
 import ProductoPlegable from '../ProductoPlegable'
@@ -1702,6 +1703,19 @@ function FilaNum({ a, b, color, fuerte }) {
 
 // Monitor del dia a dia: cuanto esta ganando o perdiendo el club y como queda con cada productor.
 function Estadisticas() {
+  const [vista, setVista] = useState('club')
+  return (
+    <>
+      <div className="chips">
+        <button type="button" className={'chip' + (vista === 'club' ? ' on' : '')} onClick={() => setVista('club')}>Resultado del club</button>
+        <button type="button" className={'chip' + (vista === 'ventas' ? ' on' : '')} onClick={() => setVista('ventas')}>Ventas y uso</button>
+      </div>
+      {vista === 'club' ? <EstadisticasClub /> : <VentasUso />}
+    </>
+  )
+}
+
+function EstadisticasClub() {
   const hoy = new Date(Date.now() - 3 * 3600 * 1000)
   const actual = { a: hoy.getUTCFullYear(), m: hoy.getUTCMonth() }
   const [per, setPer] = useState(actual)
