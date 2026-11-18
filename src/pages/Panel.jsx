@@ -1162,6 +1162,11 @@ function TiendaAdmin() {
   async function agregar(e) {
     e.preventDefault()
     setMsg(null)
+    if (!secciones.some((x) => x.id === nuevo.seccion)) {
+      return setMsg({ tipo: 'error', texto: secciones.length === 0
+        ? 'La tienda no tiene secciones. El administrador tiene que crear al menos una (Tienda → Secciones) antes de cargar productos.'
+        : 'Elegí una sección para el producto.' })
+    }
     const { error } = await supabase.from('tienda_productos').insert(datos(nuevo))
     if (error) return setMsg({ tipo: 'error', texto: error.message })
     setMsg({ tipo: 'ok', texto: 'Producto agregado: ' + nuevo.nombre })
