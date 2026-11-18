@@ -1,4 +1,4 @@
-// Administrador: cupo semanal de avisos de cada productor e historial de lo que enviaron.
+// Administrador: envía avisos al club, define el cupo semanal de cada productor y ve el historial.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import { Msg } from './ui'
@@ -12,6 +12,10 @@ export default function AvisosAdmin() {
   const [msg, setMsg] = useState(null)
   const [general, setGeneral] = useState('')
   const [edit, setEdit] = useState({})
+  const [titulo, setTitulo] = useState('')
+  const [mensaje, setMensaje] = useState('')
+  const [dest, setDest] = useState('todos')
+  const [enviando, setEnviando] = useState(false)
 
   const cargar = useCallback(async () => {
     const [c, h] = await Promise.all([supabase.rpc('cupos_avisos_admin'), supabase.rpc('historial_avisos_productor', { p_limite: 100 })])
@@ -21,6 +25,20 @@ export default function AvisosAdmin() {
     if (c.data) setGeneral(String(c.data.defecto))
   }, [])
   useEffect(() => { cargar() }, [cargar])
+
+  async function enviar(e) {
+    e.preventDefault()
+    if (enviando) return
+    setMsg(null)
+    setEnviando(true)
+    const { data, error } = await supabase.rpc('enviar_aviso_admin', { p_titulo: titulo, p_mensaje: mensaje, p_destinatario: dest })
+    setEnviando(false)
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    setMsg({ tipo: 'ok', texto: 'Aviso enviado a ' + data.destinatarios + (data.destinatarios === 1 ? ' persona.' : ' personas.') + ' Quienes apagaron estos avisos no lo reciben.' })
+    setTitulo('')
+    setMensaje('')
+    cargar()
+  }
 
   async function guardarGeneral(aTodos) {
     setMsg(null)
@@ -46,6 +64,22 @@ export default function AvisosAdmin() {
       <Msg m={msg} />
       {!datos ? <p className="mu">Cargando...</p> : (
         <>
+          <form className="card" onSubmit={enviar}>
+            <h3>Enviar un aviso del club</h3>
+            <label htmlFor="av-dest">Para quién</label>
+            <select id="av-dest" value={dest} onChange={(e) => setDest(e.target.value)}>
+              <option value="todos">Todos (socios y productores)</option>
+              <option value="productores">Solo productores</option>
+              <option value="socios">Solo socios</option>
+            </select>
+            <label htmlFor="av-tit">Título ({titulo.length}/40)</label>
+            <input id="av-tit" maxLength={40} value={titulo} onChange={(e) => setTitulo(e.target.value)} required />
+            <label htmlFor="av-msj">Mensaje ({mensaje.length}/120)</label>
+            <textarea id="av-msj" rows={3} maxLength={120} value={mensaje} onChange={(e) => setMensaje(e.target.value)} required />
+            <button type="submit" className="btn pri" style={{ marginTop: 10 }} disabled={enviando || !titulo.trim() || !mensaje.trim()}>{enviando ? 'Enviando...' : 'Enviar aviso'}</button>
+            <p className="mu" style={{ fontSize: 13 }}>Llega como notificación push, sin cupo semanal. Quien apagó los avisos del club en sus preferencias no lo recibe. Queda en el historial.</p>
+          </form>
+
           <div className="card">
             <h3>Cupo general</h3>
             <label htmlFor="av-gen">Avisos por semana por productor</label>
@@ -82,7 +116,7 @@ export default function AvisosAdmin() {
             {hist && hist.length === 0 && <p className="mu">Todavía no se envió ningún aviso.</p>}
             {(hist || []).map((a) => (
               <div key={a.id} style={{ padding: '10px 0', borderTop: '1px solid var(--ln)' }}>
-                <p className="mu" style={{ margin: 0 }}>{fecha(a.creado_en)} · <b>{a.cerveceria}</b> · {a.destinatarios} socios</p>
+                <p className="mu" style={{ margin: 0 }}>{fecha(a.creado_en)} · <b>{a.cerveceria}</b> · {a.del_admin ? 'para ' + ({ todos: 'todos', productores: 'productores', socios: 'socios' }[a.destinatario] || a.destinatario) + ' · ' : 'para socios · '}{a.destinatarios} {a.destinatarios === 1 ? 'persona' : 'personas'}</p>
                 <p style={{ margin: '2px 0' }}><b>{a.titulo}</b></p>
                 <p className="mu" style={{ margin: 0 }}>{a.mensaje}</p>
               </div>

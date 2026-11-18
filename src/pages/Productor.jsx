@@ -482,6 +482,63 @@ function QuedaApp({ inicio }) {
 }
 
 // Rendición mensual: porcentaje pactado sobre el ingreso, menos el valor de los puntos obtenidos.
+// Lo vendido por producto en un mes (o en todo el historial). Solo pedidos entregados.
+function VentasPorProducto() {
+  const meses = (() => {
+    const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: ZONA }))
+    return Array.from({ length: 6 }, (_, k) => {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - k, 1)
+      const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01'
+      return [iso, d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })]
+    })
+  })()
+  const [mes, setMes] = useState(meses[0][0])
+  const [filas, setFilas] = useState(null)
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    setFilas(null)
+    setError(null)
+    supabase.rpc('ventas_por_producto', { p_productor: null, p_mes: mes === 'todo' ? null : mes }).then(({ data, error: e }) => {
+      if (!vivo) return
+      if (e) setError(e.message)
+      setFilas(data || [])
+    })
+    return () => { vivo = false }
+  }, [mes])
+  const tot = (filas || []).reduce((a, f) => ({ u: a.u + Number(f.unidades), p: a.p + Number(f.pesos), pt: a.pt + Number(f.puntos) }), { u: 0, p: 0, pt: 0 })
+  return (
+    <>
+      <h3 style={{ marginTop: 14 }}>Lo que vendiste por producto</h3>
+      <div className="chips" style={{ marginTop: 0 }}>
+        {meses.map(([v, t]) => <button key={v} type="button" className={'chip' + (mes === v ? ' on' : '')} onClick={() => setMes(v)}>{t}</button>)}
+        <button type="button" className={'chip' + (mes === 'todo' ? ' on' : '')} onClick={() => setMes('todo')}>Todo</button>
+      </div>
+      <div className="card">
+        {error && <p className="msg error">{error}</p>}
+        {filas === null && !error && <p className="mu">Cargando...</p>}
+        {filas && filas.length === 0 && !error && <p className="mu">No hay ventas entregadas en este período.</p>}
+        {(filas || []).map((f, k) => (
+          <div key={k} style={{ padding: '8px 0', borderTop: k ? '1px solid var(--ln)' : 'none' }}>
+            <div className="row"><b>{f.producto}{f.formato ? ' (' + f.formato + ')' : ''}</b><b>{fmt(f.unidades)} u.</b></div>
+            <p className="mu" style={{ margin: 0 }}>
+              {Number(f.pesos) > 0 && pesos(f.pesos)}
+              {Number(f.pesos) > 0 && Number(f.puntos) > 0 && ' + '}
+              {Number(f.puntos) > 0 && fmt(f.puntos) + ' pts'} · {f.pedidos} {Number(f.pedidos) === 1 ? 'pedido' : 'pedidos'}
+            </p>
+          </div>
+        ))}
+        {filas && filas.length > 0 && (
+          <div className="row" style={{ paddingTop: 8, borderTop: '1px solid var(--ln)' }}>
+            <b>Total</b><b>{fmt(tot.u)} u. · {pesos(tot.p)}{tot.pt > 0 ? ' + ' + fmt(tot.pt) + ' pts' : ''}</b>
+          </div>
+        )}
+        <p className="mu" style={{ fontSize: 12 }}>Cuentan los pedidos entregados, según el día en que los marcaste. Los pesos son lo cobrado en efectivo o transferencia, ya con descuentos.</p>
+      </div>
+    </>
+  )
+}
+
 function Cuenta({ perfil, inicio, datos }) {
   const [tickets, setTickets] = useState(null)
   const [presen, setPresen] = useState(null)
@@ -513,6 +570,7 @@ function Cuenta({ perfil, inicio, datos }) {
           ))}
         </div>
       )}
+      <VentasPorProducto />
       <h3 style={{ marginTop: 14 }}>Rendiciones</h3>
       {tickets === null && <p className="mu">Cargando...</p>}
       {tickets && tickets.length === 0 && <p className="mu">Todavía no tenés rendiciones. La primera se genera el día 1 del mes siguiente.</p>}
