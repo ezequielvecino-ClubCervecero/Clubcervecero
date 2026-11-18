@@ -1972,6 +1972,65 @@ function FiltroEstiloAdmin() {
   )
 }
 
+// Aviso de nombres de cervecería que los productores cambiaron (se guardan directo, sin aprobación).
+function CambiosNombreAdmin() {
+  const [lista, setLista] = useState([])
+  const [msg, setMsg] = useState(null)
+  const cargar = useCallback(() => supabase.rpc('cambios_nombre_cerveceria_pendientes').then(({ data }) => setLista(data || [])), [])
+  useEffect(() => { cargar() }, [cargar])
+  async function visto(id) {
+    setMsg(null)
+    const { error } = await supabase.rpc('marcar_cambio_nombre_visto', id ? { p_id: id } : {})
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+  if (lista.length === 0) return null
+  return (
+    <div className="card" style={{ borderColor: 'var(--am)' }}>
+      <div className="row"><h3>Cambios de nombre de cervecería</h3><span className="pill warn">{lista.length}</span></div>
+      <p className="mu">Los productores cambiaron el nombre de su cervecería. Ya está aplicado; esto es solo un aviso.</p>
+      {lista.map((c) => (
+        <div key={c.id} className="row" style={{ marginTop: 8 }}>
+          <span><b>{c.nombre_anterior}</b> → <b>{c.nombre_nuevo}</b> <span className="mu">· {new Date(c.creado_en).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></span>
+          <button type="button" className="btn" onClick={() => visto(c.id)}>Visto</button>
+        </div>
+      ))}
+      {lista.length > 1 && <button type="button" className="btn" style={{ marginTop: 10 }} onClick={() => visto(null)}>Marcar todos como vistos</button>}
+      <Msg m={msg} />
+    </div>
+  )
+}
+
+// Interruptor por productor: ocultar su tienda a clientes fuera de su radio. Lo cambia el productor o el admin; vale el último.
+function OcultarFueraFila({ productorId }) {
+  const [f, setF] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const cargar = useCallback(() => supabase.from('productor_ubicacion').select('ocultar_fuera_radio, radio_envio_km, lat').eq('productor_id', productorId).maybeSingle()
+    .then(({ data }) => setF({ ocultar: !!(data && data.ocultar_fuera_radio), radio: data ? data.radio_envio_km : null, ubicada: !!(data && data.lat != null) })), [productorId])
+  useEffect(() => { cargar() }, [cargar])
+  async function cambiar() {
+    setMsg(null)
+    const { error } = await supabase.rpc('poner_ocultar_fuera_radio', { p_valor: !f.ocultar, p_productor: productorId })
+    if (error) return setMsg({ tipo: 'error', texto: error.message })
+    cargar()
+  }
+  if (!f) return null
+  const sinConfig = !f.ubicada || !(Number(f.radio) > 0)
+  return (
+    <div style={{ marginTop: 8 }}>
+      <p>
+        Ocultar a clientes fuera de su radio: <span className={'pill ' + (f.ocultar ? 'warn' : 'ok')}>{f.ocultar ? 'Sí' : 'No'}</span>
+        <button type="button" className="btn" style={{ marginLeft: 8 }} onClick={cambiar}>{f.ocultar ? 'Apagar' : 'Encender'}</button>
+      </p>
+      <p className="mu">
+        {f.ubicada ? 'Dirección cargada' : 'Sin dirección cargada'} · {f.radio === null ? 'radio sin límite' : Number(f.radio) === 0 ? 'no hace envíos' : 'radio ' + Number(f.radio) + ' km'}
+        {f.ocultar && sinConfig ? ' · no tiene efecto hasta que cargue dirección y un radio mayor a 0' : ''}
+      </p>
+      <Msg m={msg} />
+    </div>
+  )
+}
+
 function ProductoresAdmin({ club }) {
   const hoy = new Date(Date.now() - 3 * 3600 * 1000)
   const actual = { a: hoy.getUTCFullYear(), m: hoy.getUTCMonth() }
@@ -2084,6 +2143,7 @@ function ProductoresAdmin({ club }) {
       <h2 style={{ marginTop: 6 }}>Productores</h2>
       <CercaniaAdmin />
       <FiltroEstiloAdmin />
+      <CambiosNombreAdmin />
       <Msg m={msg} />
 
       {rends.length > 0 && (
@@ -2152,6 +2212,7 @@ function ProductoresAdmin({ club }) {
               Tienda: <span className={'pill ' + (pr.tienda_abierta ? 'ok' : 'bad')}>{pr.tienda_abierta ? 'Abierta' : 'Cerrada'}</span>
               {pr.tienda_bloqueada && <span className="msg error" style={{ marginLeft: 8 }}>Se cerró sola por 3 pedidos sin respuesta</span>}
             </p>
+            <OcultarFueraFila productorId={pr.id} />
             {pr.sin_cerrar > 0 && <p className="msg error">{pr.sin_cerrar} {pr.sin_cerrar === 1 ? 'pedido aceptado' : 'pedidos aceptados'} sin cerrar hace más de 7 días.</p>}
             {f && (
               <div style={{ marginTop: 8 }}>

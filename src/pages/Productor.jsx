@@ -599,6 +599,7 @@ function UbicacionEnvios({ perfil, tieneNombre }) {
   const [f, setF] = useState(null)
   const [activa, setActiva] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [msgOcultar, setMsgOcultar] = useState(null)
 
   useEffect(() => {
     supabase.from('productor_ubicacion').select('*').eq('productor_id', perfil.id).maybeSingle().then(({ data }) => {
@@ -608,6 +609,9 @@ function UbicacionEnvios({ perfil, tieneNombre }) {
         lng: data && data.lng != null ? Number(data.lng) : null,
         publica: !!(data && data.direccion_publica),
         radio: data && data.radio_envio_km != null ? String(Number(data.radio_envio_km)) : '',
+        ocultar: !!(data && data.ocultar_fuera_radio),
+        radioGuardado: data && data.radio_envio_km != null ? Number(data.radio_envio_km) : null,
+        ubicadaGuardada: !!(data && data.lat != null),
       })
     })
     supabase.rpc('cercania_activa').then(({ data }) => setActiva(!!data))
@@ -626,6 +630,15 @@ function UbicacionEnvios({ perfil, tieneNombre }) {
       p_direccion: f.direccion.trim() || null, p_lat: f.lat, p_lng: f.lng, p_publica: f.publica, p_radio: r,
     })
     setMsg(error ? { tipo: 'error', texto: error.message } : { tipo: 'ok', texto: 'Guardado.' })
+    if (!error) setF((x) => ({ ...x, radioGuardado: r, ubicadaGuardada: x.lat != null }))
+  }
+
+  // El interruptor se guarda al tocarlo, sin pasar por "Guardar": así no pisa un cambio que haya hecho el administrador.
+  async function cambiarOcultar(valor) {
+    setMsgOcultar(null)
+    const { error } = await supabase.rpc('poner_ocultar_fuera_radio', { p_valor: valor })
+    if (error) return setMsgOcultar({ tipo: 'error', texto: error.message })
+    setF((x) => ({ ...x, ocultar: valor }))
   }
 
   return (
@@ -656,6 +669,24 @@ function UbicacionEnvios({ perfil, tieneNombre }) {
       <button className="btn pri" style={{ marginTop: 16 }} disabled={!tieneNombre}>Guardar</button>
       {!tieneNombre && <p className="mu">Primero guardá el nombre de tu cervecería arriba.</p>}
       <Msg m={msg} />
+
+      <div style={{ borderTop: '1px solid var(--ln)', marginTop: 16, paddingTop: 12 }}>
+        <label className="row" style={{ justifyContent: 'flex-start', gap: 8, margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={f.ocultar} disabled={!tieneNombre}
+            onChange={(e) => cambiarOcultar(e.target.checked)} />
+          <span>Ocultar mi tienda a los clientes que están fuera de mi radio de envío</span>
+        </label>
+        <p className="mu" style={{ marginTop: 6 }}>
+          Este cambio se guarda al tocarlo. Apagado, esos clientes ven tu tienda con la distancia y solo retiro en el local.
+          <b> Encendido, no ven tus productos ni siquiera para retirar</b>, así que perdés ventas de retiro de quienes viven lejos.
+          Solo rige si cargaste tu dirección y un radio mayor a 0, y si el cliente ya dio su ubicación; si no, tu tienda se ve normal.
+          El club también puede cambiar este interruptor: queda como lo dejó el último que lo tocó.
+        </p>
+        {f.ocultar && (!f.ubicadaGuardada || !(f.radioGuardado > 0)) && (
+          <p className="msg error">Para que funcione guardá tu dirección y un radio de envío mayor a 0.</p>
+        )}
+        <Msg m={msgOcultar} />
+      </div>
     </form>
   )
 }

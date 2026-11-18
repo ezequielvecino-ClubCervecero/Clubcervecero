@@ -112,10 +112,12 @@ export default function Tienda({ perfil }) {
   }
 
   // Los productos de una tienda cerrada no se muestran (y se sacan del carrito).
+  // Con cercanía, también se ocultan las cervecerías que eligieron no mostrarse a clientes fuera de su radio de envío.
+  const ocultas = useMemo(() => new Set(cerc.filter((r) => r.oculta).map((r) => r.productor_id)), [cerc])
   const abiertos = useMemo(() => productos.filter((p) => {
     const t = tiendas[p.productor_id || '']
-    return !(t && t.abierta === false)
-  }), [productos, tiendas])
+    return !(t && t.abierta === false) && !ocultas.has(p.productor_id || '')
+  }), [productos, tiendas, ocultas])
   useEffect(() => {
     setCarrito((c) => {
       const ids = Object.keys(c)
