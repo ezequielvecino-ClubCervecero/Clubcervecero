@@ -295,65 +295,66 @@ export default function Tienda({ perfil }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
-      <div className="chips chips-parejos">
+      <div className="filtros-fila" role="group" aria-label="Filtros y orden">
         {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
-          <button key={s.id} className={'chip' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null); setEstiloSel(null) }}>{s.nombre}</button>
+          <button key={s.id} className={'chip chip-s' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null); setEstiloSel(null) }}>{s.nombre}</button>
         ))}
-      </div>
-      {formatosHay.length > 0 && (
-        <div className="chips chips-parejos" aria-label="Filtrar por formato">
-          <button className={'chip' + (!formatoSel ? ' on' : '')} onClick={() => setFormatoSel(null)}>Todos los formatos</button>
+        {formatosHay.length > 0 && <>
+          <span className="sep-fila" aria-hidden="true" />
+          <button className={'chip chip-s' + (!formatoSel ? ' on' : '')} onClick={() => setFormatoSel(null)}>Todos los formatos</button>
           {formatosHay.map(([id, nombre]) => (
-            <button key={id} className={'chip' + (formatoSel === id ? ' on' : '')} onClick={() => setFormatoSel(id)}>{nombre}</button>
+            <button key={id} className={'chip chip-s' + (formatoSel === id ? ' on' : '')} onClick={() => setFormatoSel(id)}>{nombre}</button>
           ))}
-        </div>
-      )}
-      {filtroEstilo && estilosHay.length > 0 && (
-        <div className="chips chips-parejos" aria-label="Filtrar por estilo">
-          <button className={'chip' + (!estiloSel ? ' on' : '')} onClick={() => setEstiloSel(null)}>Todos los estilos</button>
+        </>}
+        {filtroEstilo && estilosHay.length > 0 && <>
+          <span className="sep-fila" aria-hidden="true" />
+          <button className={'chip chip-s' + (!estiloSel ? ' on' : '')} onClick={() => setEstiloSel(null)}>Todos los estilos</button>
           {estilosHay.map(([id, nombre]) => (
-            <button key={id} className={'chip' + (estiloSel === id ? ' on' : '')} onClick={() => setEstiloSel(id)}>{nombre}</button>
+            <button key={id} className={'chip chip-s' + (estiloSel === id ? ' on' : '')} onClick={() => setEstiloSel(id)}>{nombre}</button>
           ))}
-        </div>
-      )}
-      <div className="row" style={{ justifyContent: 'flex-start', gap: 8, margin: '8px 0' }}>
-        <label htmlFor="orden" className="mu" style={{ margin: 0 }}>Ordenar por</label>
-        <select id="orden" style={{ flex: 1, width: '100%' }} value={ordenEf} onChange={(e) => setOrden(e.target.value)}>
+        </>}
+        <span className="sep-fila" aria-hidden="true" />
+        <select id="orden" aria-label="Ordenar por" className="orden-s" value={ordenEf} onChange={(e) => setOrden(e.target.value)}>
           {cercania && <option value="cercania">Más cercanas primero</option>}
           {cercania && <option value="promo">Con promoción activa</option>}
           <option value="seccion">Sección</option>
           <option value="menor">Precio: de menor a mayor</option>
           <option value="mayor">Precio: de mayor a menor</option>
         </select>
-        {cercania && !ubic && <button type="button" className="btn" style={{ whiteSpace: 'nowrap' }} onClick={usarGps}>Usar mi ubicación</button>}
+        {cercania && !ubic && <button type="button" className="chip chip-s" onClick={usarGps}>Usar mi ubicación</button>}
       </div>
       {cercania && !ubic && <Msg m={msgGps} />}
       {visibles.length === 0 && <p className="mu">No hay productos para mostrar.</p>}
-      {visibles.map((p) => (
-        <div key={p.id} className="card row">
-          <div className="row" style={{ flex: 1, minWidth: 190, flexWrap: 'nowrap', justifyContent: 'flex-start', gap: 12 }}>
-            {p.imagen_url && <img className="prod-img" src={p.imagen_url} alt={p.nombre} loading="lazy" />}
-            <div style={{ flex: 1, minWidth: 0 }}>
-            <b>{p.nombre}</b>{p.formato ? <span className="mu"> · {p.formato}</span> : null}
-            {p.tienda_formatos && <span className="pill ok" style={{ marginLeft: 6 }}>{p.tienda_formatos.nombre}</span>}
-            {p.tienda_estilos && <span className="pill warn" style={{ marginLeft: 6 }}>{p.tienda_estilos.nombre}</span>}
-            {seccion === 'todos' && nombreSeccion[p.seccion] && <p className="mu">{nombreSeccion[p.seccion]}</p>}
-            <p className="mu">Cervecería: <b>{cerveceriaDe(p, config.cerveceria_club)}</b>{cercania && cercMap[p.productor_id || ''] && cercMap[p.productor_id || ''].distancia_km != null ? ' · a ' + kmTxt(cercMap[p.productor_id || ''].distancia_km) : ''}</p>
-            {p.descripcion && <p className="mu">{p.descripcion}</p>}
-            <PromosProducto p={p} ahora={ahora} onFin={alVencer} />
-            <p>{vigente(p, 'pct', ahora) && !vigente(p, '2x1', ahora)
-              ? <><s className="mu">{pesos(p.precio_pesos)}</s> <b>{pesos(Math.round(p.precio_pesos * (100 - Number(p.promo_pct))) / 100)}</b></>
-              : pesos(p.precio_pesos)}{p.precio_puntos != null && <span className="pts" style={{ fontSize: 15 }}> · {fmt(p.precio_puntos)} pts</span>}</p>
-            {p.stock <= 5 && <p className="mu">Quedan {p.stock}</p>}
+      {visibles.map((p) => {
+        const km = cercania && cercMap[p.productor_id || ''] ? cercMap[p.productor_id || ''].distancia_km : null
+        return (
+        <div key={p.id} className="card prod-fila">
+          {p.imagen_url ? <img className="prod-img prod-img-s" src={p.imagen_url} alt={p.nombre} loading="lazy" /> : <span className="prod-img prod-img-s" aria-hidden="true" />}
+          <div className="prod-cuerpo">
+            <div className="una-linea"><b>{p.nombre}</b>{p.formato ? <span className="mu"> · {p.formato}</span> : null}</div>
+            <div className="una-linea mu">
+              {seccion === 'todos' && nombreSeccion[p.seccion] ? nombreSeccion[p.seccion] + ' · ' : ''}<b>{cerveceriaDe(p, config.cerveceria_club)}</b>{km != null ? ' · a ' + kmTxt(km) : ''}
+            </div>
+            {p.descripcion && <div className="una-linea mu">{p.descripcion}</div>}
+            <PromosProducto p={p} ahora={ahora} onFin={alVencer}>
+              {p.tienda_formatos && <span className="pill ok pill-s">{p.tienda_formatos.nombre}</span>}
+              {p.tienda_estilos && <span className="pill warn pill-s">{p.tienda_estilos.nombre}</span>}
+            </PromosProducto>
+            <div className="prod-precio">
+              {vigente(p, 'pct', ahora) && !vigente(p, '2x1', ahora)
+                ? <><s className="mu">{pesos(p.precio_pesos)}</s> <b>{pesos(Math.round(p.precio_pesos * (100 - Number(p.promo_pct))) / 100)}</b></>
+                : <b>{pesos(p.precio_pesos)}</b>}{p.precio_puntos != null && <span className="pts"> · {fmt(p.precio_puntos)} pts</span>}
+              {p.stock <= 5 && <span className="mu"> · Quedan {p.stock}</span>}
             </div>
           </div>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn" aria-label={'Quitar uno de ' + p.nombre} disabled={!carrito[p.id]} onClick={() => cambiar(p, -1)}>−</button>
+          <div className="prod-cant">
+            <button className="btn btn-s" aria-label={'Quitar uno de ' + p.nombre} disabled={!carrito[p.id]} onClick={() => cambiar(p, -1)}>−</button>
             <b aria-live="polite">{carrito[p.id] || 0}</b>
-            <button className="btn" aria-label={'Agregar uno de ' + p.nombre} disabled={(carrito[p.id] || 0) >= p.stock} onClick={() => cambiar(p, 1)}>+</button>
+            <button className="btn btn-s" aria-label={'Agregar uno de ' + p.nombre} disabled={(carrito[p.id] || 0) >= p.stock} onClick={() => cambiar(p, 1)}>+</button>
           </div>
         </div>
-      ))}
+        )
+      })}
 
       {lineas.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--am)' }}>

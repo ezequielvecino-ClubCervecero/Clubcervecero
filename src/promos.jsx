@@ -61,26 +61,25 @@ export function Contador({ hasta, onFin }) {
 }
 
 // Chapitas, condición y contadores que se ven sobre el producto en la tienda.
-export function PromosProducto({ p, ahora, onFin }) {
+export function PromosProducto({ p, ahora, onFin, children }) {
   const activas = PROMOS.filter((x) => vigente(p, x.id, ahora))
-  if (activas.length === 0) return null
+  if (activas.length === 0 && !children) return null
   const conPrecio = activas.some((x) => x.cambiaPrecio)
+  const delivery = activas.some((x) => x.id === 'delivery')
   return (
-    <div style={{ margin: '6px 0' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {activas.map((x) => (
-          <span key={x.id} className="pill warn" style={{ fontWeight: 700 }}>
+    <div className="promo-fila">
+      {children}
+      {activas.map((x) => (
+        <span key={x.id} className="promo-item">
+          <span className="pill warn pill-s" style={{ fontWeight: 700 }}>
             {x.id === 'pct' ? plata(p.promo_pct) + '% OFF' : x.id === '2x1' ? '2x1 · Llevá 2, pagá 1' : x.nombre}
           </span>
-        ))}
-      </div>
-      {conPrecio && <p className="mu" style={{ fontSize: 13, marginTop: 4 }}>Solo efectivo o transferencia (con puntos no aplica).</p>}
-      {activas.some((x) => x.id === 'delivery') && <p className="mu" style={{ fontSize: 13 }}>Delivery gratis: el envío de este producto no tiene costo.</p>}
-      {activas.map((x) => p['promo_' + x.id + '_hasta'] && (
-        <p key={x.id} className="mu" style={{ fontSize: 13 }}>
-          {x.id === 'pct' ? plata(p.promo_pct) + '% OFF' : x.nombre}: <Contador hasta={p['promo_' + x.id + '_hasta']} onFin={onFin} />
-        </p>
+          {p['promo_' + x.id + '_hasta'] && <span className="mu"> <Contador hasta={p['promo_' + x.id + '_hasta']} onFin={onFin} /></span>}
+        </span>
       ))}
+      {(conPrecio || delivery) && (
+        <span className="mu promo-nota">{[conPrecio && 'Solo efectivo o transferencia', delivery && 'envío sin costo'].filter(Boolean).join(' · ')}</span>
+      )}
     </div>
   )
 }
