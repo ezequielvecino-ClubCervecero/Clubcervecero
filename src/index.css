@@ -107,3 +107,6 @@ textarea{min-height:90px;resize:vertical}
 .prod-cant{display:flex;align-items:center;gap:6px;flex:none}
 .btn-s{padding:4px 0;width:30px;min-width:30px;height:30px;border-radius:10px;font-size:16px}
 .promo-fila:empty{display:none}
+.orden-fila{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.orden-fila .orden-s{flex:1;min-width:0;width:auto;padding:9px 28px 9px 12px;font-size:13.5px;border-radius:12px}
+.btn-ubic{flex:none;padding:9px 14px;font-size:13.5px;white-space:nowrap}

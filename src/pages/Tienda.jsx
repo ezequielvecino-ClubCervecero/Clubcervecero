@@ -295,7 +295,7 @@ export default function Tienda({ perfil }) {
   return (
     <>
       <h2 style={{ marginTop: 6 }}>Tienda</h2>
-      <div className="filtros-fila" role="group" aria-label="Filtros y orden">
+      <div className="filtros-fila" role="group" aria-label="Filtros">
         {[{ id: 'todos', nombre: 'Todos' }, ...secciones].map((s) => (
           <button key={s.id} className={'chip chip-s' + (s.id === seccion ? ' on' : '')} onClick={() => { setSeccion(s.id); setFormatoSel(null); setEstiloSel(null) }}>{s.nombre}</button>
         ))}
@@ -313,7 +313,8 @@ export default function Tienda({ perfil }) {
             <button key={id} className={'chip chip-s' + (estiloSel === id ? ' on' : '')} onClick={() => setEstiloSel(id)}>{nombre}</button>
           ))}
         </>}
-        <span className="sep-fila" aria-hidden="true" />
+      </div>
+      <div className="orden-fila">
         <select id="orden" aria-label="Ordenar por" className="orden-s" value={ordenEf} onChange={(e) => setOrden(e.target.value)}>
           {cercania && <option value="cercania">Más cercanas primero</option>}
           {cercania && <option value="promo">Con promoción activa</option>}
@@ -321,7 +322,7 @@ export default function Tienda({ perfil }) {
           <option value="menor">Precio: de menor a mayor</option>
           <option value="mayor">Precio: de mayor a menor</option>
         </select>
-        {cercania && !ubic && <button type="button" className="chip chip-s" onClick={usarGps}>Usar mi ubicación</button>}
+        {cercania && !ubic && <button type="button" className="btn pri btn-ubic" onClick={usarGps}>Usar mi ubicación</button>}
       </div>
       {cercania && !ubic && <Msg m={msgGps} />}
       {visibles.length === 0 && <p className="mu">No hay productos para mostrar.</p>}
